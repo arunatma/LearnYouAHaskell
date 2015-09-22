@@ -47,7 +47,7 @@ surface (Rectangle x1 y1 x2 y2) = (abs $ x2 - x1) * (abs $ y2 - y1)
 data Shape' = Circle' Float Float Float | Rectangle' Float Float Float Float
     deriving Show
 
--- The following command makes a new value constructor 'Shape' which is 
+-- The following command makes a new value constructor 'Shapes' which is 
 -- different from the type 'Shape' that we saw.  Both have no connection at all!    
 data Shapes = Shape deriving Show    
 
