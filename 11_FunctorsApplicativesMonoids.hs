@@ -5,6 +5,7 @@
 import Data.Char
 import Data.List  
 import Control.Monad.Instances
+import Control.Applicative
   
 -- Functors
 -- Functor is a typeclass
@@ -21,14 +22,14 @@ import Control.Monad.Instances
 -- 1. A box containing 'b'  (Note that 'box' means context, not literally box)
 
 -- Try to get the kind of the functor
--- :k Maybe or :k [] on the ghci consol
--- * -> * (means, it takes one concret type as a type parameter)
+-- :k Maybe or :k [] on the ghci console
+-- * -> * (means, it takes one concrete type as a type parameter)
 
 -- Any abstract type taking just one type parameter (i.e a type constructor 
 -- taking a single type parameter) can be made an instance of Functor type class
 
 -- A type can be made an instance of Functor if it takes only one type parameter
--- Maybe or []
+-- The likes of Maybe, [] etc.,
 -- "instance Functor Maybe where" is how typeclass instance defined for Maybe
 -- Either takes two : Either a b. So, one parameter has to be applied
 -- "instance Functor Either where"  is wrong
@@ -142,8 +143,8 @@ instance Functor ((->) r) where
 
 fnComp1 = fmap (*3) (+100) 1 
 fnComp2 = (*3) `fmap` (+100) $ 1        -- Same written using infix notation
-fnComp3 = (*3) . (+100) $ 1             -- Using composition operator
-fnComp4 = fmap (show . (*3)) (+100) 1   -- Using both fmap and (.)
+fnComp3 = (*3) . (+100) $ 1             -- Using composition operator	(303)
+fnComp4 = fmap (show . (*3)) (+100) 1   -- Using both fmap and (.)		("303")
 
 -- Playing around with the meaning of fmap
 -- fmap :: Functor f => (a -> b) -> f a -> f b
@@ -196,5 +197,29 @@ idList      = id [3, 4]
 -- fmap (f . g) = fmap f . fmap g
 -- For any functor F
 -- fmap (f . g) F = fmap f (fmap g F)
+
+
+-- fmap (f . g) Nothing == Nothing
+-- fmap f (fmap g Nothing) == Nothing
+-- fmap (f . g) (Just 5) == fmap f (fmap g (Just 5))
+-- fmap ((+2) . (*3)) (Just 5) == Just 17
+-- fmap (+2) (fmap (*3) (Just 5)) == Just 17
+
+-- A hypothetical data type to show that being an instance of Functory typeclass
+-- does not guarantee it to be a functor
+-- A functor should obey both the functor laws
+
+data CMaybe a = CNothing | CJust Int a deriving (Show)
+instance Functor CMaybe where  
+    fmap f CNothing = CNothing  
+    fmap f (CJust counter x) = CJust (counter+1) (f x) 
+
+-- Testing the identity functor law
+testId0 = id (CJust 0 "haha")			-- 0
+testId1 = fmap id (CJust 0 "haha")		-- 1
+-- id (f) == fmap id (f)  where f is a functor;  Here, this law is not satisfied
+
+-- Just, make sure when creating the instances that the functor obeys both the
+-- functor laws
 
 
