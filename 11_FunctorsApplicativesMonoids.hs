@@ -4,7 +4,6 @@
 
 import Data.Char
 import Data.List  
-import Control.Monad.Instances
 import Control.Applicative
   
 -- Functors
@@ -215,11 +214,63 @@ instance Functor CMaybe where
     fmap f (CJust counter x) = CJust (counter+1) (f x) 
 
 -- Testing the identity functor law
-testId0 = id (CJust 0 "haha")			-- 0
-testId1 = fmap id (CJust 0 "haha")		-- 1
+testId0 = id (CJust 0 "haha")           -- 0
+testId1 = fmap id (CJust 0 "haha")      -- 1
 -- id (f) == fmap id (f)  where f is a functor;  Here, this law is not satisfied
 
 -- Just, make sure when creating the instances that the functor obeys both the
 -- functor laws
 
 
+-- Applicative Functors
+-- Present in Control.Applicative (import the same)
+
+-- Haskell is curried, in terms of function application 
+-- And left associative
+-- a -> b -> c -> d 
+-- d = f a b c which is also d = ((f a) b) c
+
+-- What if the map function done over functor with fmap, takes two parameters?
+fnInContext1 = fmap (*) (Just 3) 
+-- Try to get the type of fnInContext1 using :t
+-- fmap (*) (Just 3) :: Num a => Maybe (a -> a)
+-- So, it is a function that takes a 'Num' and gives out a 'Num', but the 
+-- function is present inside the Maybe context 
+-- fmap applies the function (*) to what is inside the context (here 'Just')
+-- so, we effectively get Just (*3)
+
+-- A few more examples
+fnInContext2 = fmap (++) (Just "hey")   -- equivalent of Just ("hey" ++)
+                                        -- Maybe ([Char] -> [Char])
+
+fnInContext3 = fmap compare (Just 'a')  -- equiv. of Just (compare 'a')
+                                        -- Maybe (Char -> Ordering)
+
+fnInContext4 = fmap compare "A String"  -- [Char -> Ordering]
+
+fnInContext5 = fmap (\x y z -> x + y / z) [3, 4, 5, 6] 
+                                        -- (Fractional a) => [a -> a -> a]
+-- In the above case, the function needs 3 inputs out of which only 'x' is 
+-- supplied as 3, 4, 5, 6.  So, we get a list of functions expecting 'y' and 'z'
+-- and producing 'z'
+
+fnInContext6 = fmap (*) [1, 2, 3, 4]    -- equiv. of [(*1), (*2), (*3), (*4)]
+                                        -- Num a => [a -> a]
+
+-- Now, let us supply arguments to these functions present inside the context
+
+mul9 = fmap (\x -> x 9) fnInContext6    -- [9, 18, 27, 36]
+
+-- Functors: Help in mapping normal functions over the functors
+-- Applicative Functors: Help in mapping function inside a functor over another 
+-- functor.
+
+-- In the Control.Applicative, the following class is defined.
+{-
+class (Functor f) => Applicative f where  
+    pure :: a -> f a  
+    (<*>) :: f (a -> b) -> f a -> f b 
+-}
+
+-- Any type to be an instance of 'Applicative' should first be instance of 
+-- Functor
