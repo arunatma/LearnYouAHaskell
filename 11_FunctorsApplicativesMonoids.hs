@@ -270,7 +270,176 @@ mul9 = fmap (\x -> x 9) fnInContext6    -- [9, 18, 27, 36]
 class (Functor f) => Applicative f where  
     pure :: a -> f a  
     (<*>) :: f (a -> b) -> f a -> f b 
+
 -}
+-- Just the class is defined, no default implementation is provided. It is left
+-- to the users in the instance definition.
 
 -- Any type to be an instance of 'Applicative' should first be instance of 
 -- Functor
+
+-- Looking at the above,
+-- pure takes in a type and puts it in the Applicative Functor context 'f'
+-- (<*>) takes in a function within a context 'f' and a type 'a' also within the
+-- same context and returns another type 'b' within the same context 
+-- (<*>) is very similar to fmap whose type signature is (a -> b) -> f a -> f b 
+-- Just that, here the function that (<*>) takes is put inside the context 
+
+
+-- Applicative Instance implementation for 'Maybe'
+{-
+Commented, because this is already defined in the library
+
+instance Applicative Maybe where 
+    pure = Just
+    Nothing <*> _           = Nothing
+    (Just f) <*> something  = fmap f something 
+
+    -- here f in (Just f) is a function 
+-}
+
+-- No function can be extracted from 'Nothing', so the result will be 'Nothing'
+-- If a function can be extracted ('f'), that is fmap applied to something
+-- As per the definition of 'Applicative' both the arguments of (<*>) are 
+-- functors i.e f (a -> b) and f a 
+-- So, in fmap f something, 'something' is a functor 
+
+applicativeEx1 = Just (+3) <*> Just 9           -- Just 12
+applicativeEx2 = pure (+3) <*> Just 10          -- Just 13
+applicativeEx3 = Just (++ "hello") <*> Just "hi"    -- "hihello" 
+applicativeEx4 = Just ("hello" ++) <*> Just "hi"    -- "hellohi"
+applicativeEx5 = Just (++ "hello") <*> Nothing  -- Nothing 
+applicativeEx6 = Nothing <*> Just 9             -- Nothing 
+
+-- Operate on several functors with a single function
+applicativeChain1 = pure (+) <*> Just 3 <*> Just 5      -- Just 8
+-- (pure (+) <*> Just 3) <*> Just 5
+-- Just (+3) <*> Just 5
+applicativeChain2 = pure (+) <*> Just 3 <*> Nothing             -- Nothing
+applicativeChain3 = Nothing <*> Just 3 <*> Just 2               -- Nothing
+applicativeChain4 = Nothing <*> Just 3 <*> Just 2 <*> Just 1    -- Nothing
+-- But the following will throw error
+-- applicativeChain5 = pure (+) <*> Just 3 <*> Just 2 <*> Just 1    
+
+-- The following is perfectly fine
+applicativeChain6 = pure (\x y z -> x + y + z) <*> Just 3 <*> Just 2 <*> Just 1    
+
+-- The general format is
+-- pure f <*> apFunctor1 <*> apFunctor2 <*> apFunctor3 <*> ...
+
+-- pure f <*> x is the equivalent of fmap f x 
+-- So, a special function <$> is defined in Control.Applicative which does that 
+{-
+
+(<$>) :: (Functor f) => (a -> b) -> f a -> f b 
+f <$> x = fmap f x 
+
+f in the type signature refers to functor 
+f in the function definition refers to a function 
+-}
+
+-- Now, with the use of <$>, the applicativeChain6 can be rewritten as 
+applicativeChain7 = (\x y z -> x + y + z) <$> Just 3 <*> Just 2 <*> Just 1    
+-- of the format 
+--                              f <$> x <*> y <*> z
+-- which, of course is same as 
+--                         pure f <*> x <*> y <*> z
+
+applicativeChain8 = (++) <$> Just "Sachin" <*> Just "Tendulkar"
+normalEqvApChain8 = (++) "Sachin" "Tendulkar"
+
+-- <$> and <*> helps to operate the normal function on applicative functors!!
+
+-- Try the following in ghci
+-- :t (++)                      [a] -> [a] -> [a]
+-- :t (++) <$> Just "Sachin"    Maybe ([Char] -> [Char]) Function within Context
+-- :t (++) <$> Just "Sachin" <*> Just "Tendulkar"   Maybe [Char] 
+
+-- Lists as Applicative Functors ([])
+{-
+Instance Definition 
+
+instance Applicative [] where 
+    pure x = [x]
+    fs <*> xs = [f x | f <- fs, x <- xs]
+-}
+-- Every function to the left of <*> is applied to every element on the right 
+
+
+-- Both the arguments of <*> should be of the same type 
+-- Here it is []
+-- The first argument should be a function enclosed in the context 
+-- i.e Maybe Function or [List of Functions] or any other applicative 
+
+-- 'pure' takes a value and put in a minimal context
+-- Like Just x, here it is [x]
+-- Though 'Nothing' or [] are the minimal context, the value 'x' cannot be 
+-- expressed in it.
+
+-- pureEx1 = pure "Hi"                     -- "Hi" (works only in ghci)
+-- In ghci, it takes as function application context, whereas here, it does not
+-- understand, what context it is in 
+pureEx2 = pure "Hi" :: Maybe String     -- Just "Hi"
+pureEx3 = pure "Hi" :: [String]         -- ["Hi"]
+
+-- The type of <*> if it were to work for only lists 
+-- (<*>) :: [a -> b] -> [a] -> [b]
+-- The type of <*> if it were to work for only 'Maybe' 
+-- (<*>) :: Maybe (a -> b) -> Maybe a -> Maybe b
+
+listApp1 = [(*0),(+100),(^2)] <*> [1,2,3]       -- list of 9 elements 
+-- [0, 0, 0, 101, 102, 103, 1, 4, 9]
+listApp2 = [(flip (-) 100),((-)100),(2^)] <*> [1,2,3]
+-- [-99, -98, -97, 99, 98, 97, 2, 4, 8]
+
+listApp3 = [(+),(*)] <*> [1,2] <*> [3,4]
+-- [(+)1, (+)2, (*)1, (*)2] <*> [3, 4]
+-- [(+) 1 3, (+) 1 4, (+) 2 3, (+) 2 4, (*) 1 3, (*) 1 4, (*) 2 3, (*) 2 4]
+-- [4, 5, 5, 6, 3, 4, 6, 8]
+
+-- <*> is left associative, so start applying the functions from the left 
+
+listApp4 = (++) <$> ["ha", "heh", "hmm"] <*> ["?", "!", "."]
+-- [(++) "ha", (++) "heh", (++) "hmm"] <*> ["?", "!", "."]
+-- [(++) "ha" "?", (++) "ha" "!", (++) "ha" "." ....]
+-- ["ha?", "ha!", "ha.", "heh?", "heh!", "heh.", "hmm?", "hmm!", "hmm."]
+
+-- Lists are for non-deterministic computation
+-- (+) 3 2 will always give 5
+-- But if one wants to add elements present in a list 
+-- (+) <$> [2, 3] <*> [4, 6]        -- [6, 8, 7, 9] (there is no single output)
+
+listApp5 = (*) <$> [2, 5, 10] <*> [8, 10, 11]
+eqLstAp5 = [x * y | x <- [2,5,10], y <- [8,10,11]] 
+-- This is nothing but the list instance implementation for Applicative
+
+-- A little probe into (*) <$> [2, 5, 10]
+-- f <$> xs 
+-- pure f <*> xs 
+-- [f] <*> xs 
+-- The catch is that, with the use of <$>, there is just one funtion that 
+-- can be applied, because <$> uses "fmap"
+
+{-
+3. Applicative Instance for IO
+
+instance Applicative IO where
+    pure = return
+    a <*> b = do 
+        f <- a
+        x <- b
+        return (f x)
+-}
+ 
+-- pure is putting the element in minimal context 
+-- 'return' is the minimal in the IO context 
+-- return makes an IO action, but really does not do anything 
+-- puts the element in the IO context, that's it.
+
+-- Type signature for <*> if it were specialized for IO
+-- <*> :: IO (a -> b) -> IO a -> IO b
+
+-- Means, 
+-- Take an IO action, which yields a function as a result (a -> b)
+-- Take another IO action, which yields a value (a) 
+-- Perform another IO action with the function applied on the value, as result 
