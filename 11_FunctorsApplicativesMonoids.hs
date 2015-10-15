@@ -286,9 +286,8 @@ class (Functor f) => Applicative f where
 -- Just that, here the function that (<*>) takes is put inside the context 
 
 
--- Applicative Instance implementation for 'Maybe'
 {-
-Commented, because this is already defined in the library
+1. Applicative Instance implementation for 'Maybe'
 
 instance Applicative Maybe where 
     pure = Just
@@ -355,9 +354,8 @@ normalEqvApChain8 = (++) "Sachin" "Tendulkar"
 -- :t (++) <$> Just "Sachin"    Maybe ([Char] -> [Char]) Function within Context
 -- :t (++) <$> Just "Sachin" <*> Just "Tendulkar"   Maybe [Char] 
 
--- Lists as Applicative Functors ([])
 {-
-Instance Definition 
+2. Applicative instance for Lists []
 
 instance Applicative [] where 
     pure x = [x]
@@ -443,3 +441,102 @@ instance Applicative IO where
 -- Take an IO action, which yields a function as a result (a -> b)
 -- Take another IO action, which yields a value (a) 
 -- Perform another IO action with the function applied on the value, as result 
+
+-- Effectively,
+-- We are taking two IO actions (sequencing them) and make into one.
+-- Perform the sequenced IO operation to produce the result 
+
+ioWithoutAppFun :: IO String 
+ioWithoutAppFun = do 
+    a <- getLine
+    b <- getLine
+    return (a ++ b)
+    
+-- This performs two IO actions (two getLine), binds those with variables 'a' 
+-- and 'b' and concatenate, put in the IO context (return)
+-- ioWithoutAppFun is of type "IO String", which means the output will be a 
+-- string in the IO context 
+
+ioWithAppFun :: IO String
+ioWithAppFun = (++) <$> getLine <*> getLine
+
+-- This is intuitive to understand
+-- (++) takes two strings as inputs (or two lists, in general)
+-- In applicative functor context, the string is encompassed in IO with getLine 
+-- And concatenated with another string encompassed in IO with the 2nd getLine
+-- (++) <$> getLine <*> getLine
+
+-- If you ever find yourself binding some I/O actions to names and then calling 
+-- some function on them and presenting that as the result by using return, 
+-- consider using the applicative style because it is more concise and terse.
+
+{-
+4. Applicative Instance for (-> r)
+
+instance Applicative ((->) r) where 
+    pure x = (\_ -> x)
+    f <*> g = \x -> f x (g x)
+    
+-}
+
+-- type of "pure" (if it were only to ((->) r)
+-- pure :: a -> (r -> a)
+-- puts in a minimal context (which is the value itself)
+
+fnAppFn1 = pure 3 "blah"            -- 3 
+--  fnAppFn2 = pure 4               -- is not syntactically correct 
+fnAppFn3 = (pure 3) "blah"          -- 3
+-- pure 3 "blah"
+-- (pure 3) "blah"
+-- (\_ -> 3) "blah"                 -- function that takes argument "blah"
+                                    -- and ignores it, and always return 3 
+
+-- Let us look at <*> for the ((->) r) applicative functor
+-- :t (+) <$> (+3) <*> (*100)
+-- Num a => a -> a 
+-- Creates a function, that takes a Num and returns a Num 
+fnAppFn4 = (+) <$> (+3) <*> (*100)  -- Take a num (add 3) and (multiply 100)
+                                    -- then, add both 
+                                    -- ((+3) x) + ((*100) x)
+fnAppFn4Ex1 = fnAppFn4 3            -- 306 
+fnAppFn4Ex2 = fnAppFn4 6            -- 609
+
+fnAppFn5 = (+) <$> (+3) <*> (*100) $ 5 -- 508 (direct application)
+
+-- Here, the inputs to <*> are two functions
+-- So, we get back another function as the result 
+fnAppFn6 =  (\x y z -> [x,y,z]) <$> (+3) <*> (*2) <*> (/2) $ 5  -- [8, 10, 2.5]
+
+-- Generic format:
+-- k <$> f <*> g $ x
+-- Call function 'k' with the results of f and g 
+-- f and g themselves are function applied over x 
+
+{-
+5. Applicative Instance for ZipList (resides in Control.Applicative
+
+instance Applicative ZipList where 
+    pure x = ZipList (repeat x)
+    ZipList fs <*> ZipList gs = ZipList (zipWith (\f x -> f x) fs xs)
+    
+-}
+
+noZipEx1 = [(+3), (*2)] <*> [1, 2]              -- [4, 5, 2, 4]
+-- what if we want the first fn to be applied to first fn, 2nd to 2nd and so on
+-- the result should be [4, 4]
+-- Introducing ZipList
+zipEx1 = getZipList $ ZipList [(+3),(*2)] <*> ZipList [1, 2]    -- [4, 4]
+zipEx2 = getZipList $ (+) <$> ZipList [1,2,3] <*> ZipList [100,100,100] 
+
+-- pure is putting something in minimal context 
+-- pure in ZipList context should be an infinite list, so it can be lazily
+-- taken and applied to the second argument 
+zipEx3 = getZipList $ pure (*2) <*> ZipList [1,5,10]        -- [2, 10, 20]
+zipEx4 = take 4 $ getZipList $ pure (*2) <*> (pure 7)       -- [14, 14, 14, 14]
+
+-- getZipList $ pure (*2) <*> (pure 7) is an infinite list of [14, 14....]
+
+zipEx5 = getZipList $ max <$> ZipList [1,2,3,4,5,3] <*> ZipList [5,3,1,2]
+zipEx6 = getZipList $ (,,) <$> ZipList "dog" <*> ZipList "cat" <*> ZipList "rat"
+-- [('d','c','r'),('o','a','a'),('g','t','t')]  
+
