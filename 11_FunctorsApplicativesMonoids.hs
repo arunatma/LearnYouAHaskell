@@ -540,3 +540,119 @@ zipEx5 = getZipList $ max <$> ZipList [1,2,3,4,5,3] <*> ZipList [5,3,1,2]
 zipEx6 = getZipList $ (,,) <$> ZipList "dog" <*> ZipList "cat" <*> ZipList "rat"
 -- [('d','c','r'),('o','a','a'),('g','t','t')]  
 
+-- zipWith takes a function and two lists (operates the function on taking 
+-- one element for each list)
+-- Like zipWith, there is zipWith3, zipWith4 ... zipWith7 (taking 3, 4 ..7 
+-- arguments for the function respectively)
+-- With ZipList, we can use applicative functor to do even zipWith50 zipWith100,
+-- though, those are practically not needed.
+
+-- liftA2 function
+-- defined in Control.Applicative
+liftA2' :: (Applicative f) => (a -> b -> c) -> f a -> f b -> f c 
+liftA2' f a b = f <$> a <*> b 
+
+-- applying a normal function on two applicative functors and getting an
+-- applicative functor as the result
+-- Also can be looked at as
+-- (a -> b -> c) -> (f a -> f b -> f c)
+-- Take a normal function that operates on two values, lift it to operate on
+-- two applicative functors 
+
+-- fmap operated as lift
+liftEx1 = fmap (\x -> [x]) (Just 4)         -- Just [4]
+-- using liftA2, because the function takes two arguments
+liftEx2 = liftA2 (:) (Just 3) (Just [4])    -- Just [3, 4]
+
+-- generalizing liftA2 function (to take more arguments)
+-- sequence function (defined in Control.Applicative)
+-- Transform a list of applicatives to an applicative with a list 
+sequenceX :: (Applicative f) => [f a] -> f [a]
+sequenceX [] = pure []
+sequenceX (x:xs) = (:) <$> x <*> sequenceX xs
+
+liftEx3 = sequenceX [Just 3, Just 4]    -- same as liftEx2
+-- same as (:) <$> (Just 3) <*> (Just [4])
+-- sequenceX [Just 3, Just 4]
+-- (:) <$> Just 3 <*> sequenceX [Just 4]
+-- (:) <$> Just 3 <*> ( (:) <$> Just 4 <*> sequenceX [])
+-- (:) <$> Just 3 <*> ( (:) <$> Just 4 <*> (pure []))
+-- (:) <$> Just 3 <*> ( (:) <$> Just 4 <*> (Just []))
+-- (:) <$> Just 3 <*> ( Just [4] )
+-- Just [3, 4]
+
+-- sequenceX, second implementation
+-- using liftA2 and foldr
+sequenceX1 :: (Applicative f) => [f a] -> f [a]
+sequenceX1 = foldr (liftA2 (:)) (pure [])
+-- foldr, start from the right and keep folding towards the left 
+-- take each element one by one from the right 
+
+seqEx1 = sequenceX [Just 3, Just 2, Just 1]           -- Just [3, 2, 1]
+seqEx2 = sequenceX [Just 3, Nothing, Just 1]          -- Nothing
+
+seqEx3 = sequenceX [(+3), (*2), flip (-) 1] 5         -- [8, 10, 4]
+seqEx4 = sequenceX [[1,2,3],[4,5,6]]       -- [[1,4], [1,5], [1,6], [2,4],...]
+
+-- seqEx3
+-- Using sequence with a list of functions and a single value
+-- Call each of the function with the value as the operator 
+-- Combine all to a list 
+
+-- See a value that satisfies a list of predicates
+mapEx1 = map (\f -> f 7) [(> 4), (<10), odd]  -- map a fn on a list of fns
+mapEx2 = and $ mapEx1                         -- 'and'  the entire list 
+
+-- Same functionality using sequenceX
+seqEx5 = sequenceX [(> 4), (<10), odd] 7         -- [True, True, True]
+seqEx6 = and $ seqEx5                           -- True 
+
+-- So, what is the difference between [(> 4),(< 10),odd]
+-- and sequenceA [(> 4),(< 10),odd]
+-- [(> 4),(< 10),odd]           :: Integral a => [a -> Bool]
+-- sequenceA [(> 4),(< 10),odd] :: Integral a => a -> [Bool]
+
+-- Fine difference - the first is a list of fns each taking 'a' and giving Bool 
+-- the second is a function that takes 'a' and gives a list of Bool 
+-- So, list of applicatives is transformed to applicative with a list 
+
+-- With [], the sequenceX takes a list of lists and gives another list of lists
+seqEx7 = sequenceX [[1,2,3],[4,5,6]]  
+-- [[1,4],[1,5],[1,6],[2,4],[2,5],[2,6],[3,4],[3,5],[3,6]]
+-- same as list comprehension
+eqvSeqEx7 = [[x, y] | x <- [1, 2, 3], y <- [4, 5, 6]]
+
+seqEx8 = sequenceX [[1,2],[3,4],[5,6]]
+eqvSeqEx8 = [[x, y, z] | x <- [1, 2], y <- [3, 4], z <- [5, 6]]
+
+-- sequenceX [[1,2],[3,4]]
+-- (:) <$> [1,2] <*> sequenceX [3,4]
+-- (:) <$> [1,2] <*> ((:) <$> [3,4] <*> sequenceX [])
+-- (:) <$> [1,2] <*> ((:) <$> [3,4] <*> pure [])
+-- (:) <$> [1,2] <*> ((:) <$> [3,4] <*> [[]])
+-- (:) <$> [1,2] <*> ((:) <$> [3,4] <*> [[]])
+-- (:) <$> [1,2] <*> ([3:[], 4:[]])
+-- (:) <$> [1,2] <*> [[3], [4]]
+-- [1:[3], 1:[4], 2:[3], 2:[4]]
+-- [[1,3], [1,4], [2,3], [2,4]]
+
+-- sequenceX can be used with IO actions as well (same as 'sequence')
+
+seqIO1 = sequenceX [getLine, getLine, getLine]      -- ["one", "two", "three"]
+
+{-
+-- Applicative Functor Laws:
+
+    pure f   <*> x              = fmap f x 
+    pure id  <*> v              = v
+    pure (.) <*> u <*> v <*> w  = u <*> (v <*> w) 
+    pure f   <*> pure x         = pure (f x)
+    u        <*> pure y         = pure ($ y) <*> u 
+
+Todo:
+
+Need to find examples for each of these laws.
+
+-}
+
+
