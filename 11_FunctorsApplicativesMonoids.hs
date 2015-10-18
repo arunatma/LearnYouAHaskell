@@ -656,3 +656,70 @@ Need to find examples for each of these laws.
 -}
 
 
+-- newtype
+-- getting back to the example of ZipList
+compreEx = [(+1),(*100),(*5)] <*> [1,2,3]  	-- gives out 9 elements as output
+zipEx	 = getZipList $ ZipList [(+1),(*100),(*5)] <*> ZipList [1,2,3]  
+-- compreEx will have [2,3,4,100,200,300,5,10,15]
+-- zipEx will have [2,200,15]
+
+{-
+
+Possibilities of ZipList definition
+
+1. Using 'data' keyword
+
+			data ZipList a = ZipList [a]
+
+	ZipList to the left of '=' is the type constructor
+	ZipList to the right of '=' is the value constructor
+	ZipList value constructor (to the right of '=') is a function of type
+	ZipList :: [a] -> ZipList a
+	
+2. Using 'data' keyword and record syntax
+	
+			data ZipList a = ZipList {getZipList :: [a]}
+	
+	The record syntax helps in getting the list out of ZipList
+	ZipList 	:: [a] -> ZipList a
+	getZipList 	:: ZipList a -> [a]
+
+-}
+
+-- Effectively, what happens in ZipList
+-- [a] is wrapped in a new data type and presented as ZipList
+-- For this very purpose, we have 'newtype'
+
+{- 
+
+Actual ZipList definition
+
+			newtype ZipList a = ZipList { getZipList :: [a] }  
+
+
+1. newtype is faster (actual wrapping / unwrapping not performed, as is the 
+   case with 'data' keyword)
+2. The compiler understands that it is the same data type wrapped into
+   something else
+3. newtype - just like any other data type, can derive Eq, Ord, Show, Read, 
+   Enum and Bounded 
+   
+-}
+
+newtype CharList = CharList { getCharList :: [Char] } deriving (Eq, Show)
+
+chLstEx1 = CharList "Cool!"			-- this has a Show instance (derived)
+chLstEx2 = getCharList chLstEx1		-- "Cool!"
+
+chLstEx3 = CharList "Hello" == CharList "Hello"		-- True
+chLstEx4 = CharList "Well" == CharList "Good"		-- False
+
+{--
+
+type signatures
+
+CharList :: [Char] -> CharList  
+getCharList :: CharList -> [Char]  
+
+--}
+
