@@ -127,3 +127,62 @@ bindMaybeEx5 = (Just 5) `bindMaybe` insideFn3           -- Nothing
 -- monadBuildFn is generalized
 -- bindMaybe is a particular function case for just "Maybe" monad 
 
+{- 
+
+Monad Typeclass
+
+class Monad m where
+    return  :: a -> m a
+    
+    (>>=)   :: m a -> (a -> m b) -> m b
+    
+    (>>)    :: m a -> m b -> m b 
+    x >> y = x >>= (\_ -> y)
+    
+    fail    :: String -> m a
+    fail msg = error msg
+
+Any type which implements these four functions and follow the monad laws is 
+said to be a monad.
+    
+-}
+
+-- Though there is no typeclass constraint in the Monad class definition,
+-- All Monads are Applicative Functors
+-- Ideally, it should have been written as (Applicative m) => Monad m 
+-- But, Monads came much ahead than Applicative Functors 
+
+{-
+
+1. Putting in the context
+
+For Applicative Functors:   "pure"
+
+For Monads:                 "return"
+    return for "Maybe" is Just 
+    return for IO is putting in IO context 
+    
+
+-}
+
+{-
+
+2. Function Application
+
+For Applicative Functors:   <*>
+    <*> :: f (a -> b) -> f a -> f b 
+
+For Monads:                 (>>=)
+    (>>=) :: m a -> (a -> m b) -> m b 
+    1. The first two arguments are order-swapped in applicative functor v Monad 
+    2. Applicative functor takes a function within the context
+       In Monad, the function takes a normal value and returns a monadic value 
+    
+-}
+
+{-
+
+3. (>>) : This comes with a default implementation, and most likely not needed
+          to change 
+
+-}
