@@ -186,3 +186,100 @@ For Monads:                 (>>=)
           to change 
 
 -}
+
+{-
+
+4. fail : To be explained later  
+
+-}
+
+
+-- MONAD INSTANCES
+
+{-
+
+1. Instance for Maybe 
+
+instance Monad Maybe where
+    return x        = Just x
+    
+    Nothing >>= f   = Nothing
+    Just x >>= f    = f x
+    
+    fail _          = Nothing 
+
+    
+See that, we have not altered the default implementation of (>>). We did only 
+the other three functions     
+
+-- 'return' is same as pure of applicative functor
+-- (>>=) is same as what we say as 'bindMaybe'
+
+-}
+
+monadMaybeEx1 = return "What" :: Maybe String           -- Just "What"
+monadMaybeEx2 = Just 9 >>= \x -> return (x * 10)        -- Just "90"
+monadMaybeEx3 = Nothing >>= \x -> return (x * 10)       -- Nothing 
+
+-- 9 is taken in for the calculation (x * 10) from Just 9, without doing 
+-- explicit pattern matching (it is done in the instance definition!)
+
+-- Using the (>>=) bind function, (Maybe a) can be fed to (a -> Maybe a) fn.
+
+{-
+
+Maybe Monad - Explanation using an example
+
+Fulcrum:
+    Pole positioned at centre on a fulcrum
+    Birds sit on pole on either sides
+    If the difference in number of birds on one side to another exceeds 3, 
+        the stick loses balance
+    Birds keep landing and taking off from either side.
+-}
+
+type Birds  = Int                -- Type synonym
+type Pole   = (Birds, Birds)     -- Pole defined by how many birds on both sides
+
+landLeft :: Birds -> Pole -> Pole 
+landLeft n (x, y) = (x + n, y)
+
+landRight :: Birds -> Pole -> Pole
+landRight n (x, y) = (x, y + n)
+
+-- The birds land in this order, on empty pole 
+-- One on left, One on right, then, two on left 
+poleEx1 = landLeft 2 (landRight 1 (landLeft 1 (0,0)))           -- (3, 1)
+
+-- Can we write this better
+-- Define a operator function (-:)
+x -: f = f x
+-- Inferred type of above function 
+-- checked using :t (-:)   
+-- (-:) :: t1 -> (t1 -> t) -> t
+
+-- Now, we can write the same in a left to right readable fashion
+poleEx2 = (0, 0) -: landLeft 1 -: landRight 1 -: landLeft 2     -- (3, 1)
+
+-- Negative numbers indicate flying off from the pole 
+poleEx3 = (0,0) -: landLeft 1 -: landRight 4 -: landLeft (-1) -: landRight (-2)
+-- poleEx3 (1, 0) -> (1, 4) -> (0, 4) -> (0, 2) 
+-- At 3rd landing, it should have toppled the pole!!
+
+poleEx4 = (0, 0) -: landLeft 10             -- (10, 3)
+-- This too, should have toppled.
+
+-- So, we need landLeft and landRight to handle the case
+landLeft' :: Birds -> Pole -> Maybe Pole
+landLeft' n (left, right)
+    | abs ((left + n) - right) <= 3 = Just (left + n, right)
+    | otherwise                     = Nothing
+    
+landRight' :: Birds -> Pole -> Maybe Pole
+landRight' n (left, right)
+    | abs ((left - (right + n) <= 3 = Just (left, right + n)
+    | otherwise                     = Nothing
+
+-- See that, instead of returning 'Pole', these return 'Maybe Pole' taking care
+-- of the failure condition
+
