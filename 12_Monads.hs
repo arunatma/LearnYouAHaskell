@@ -277,9 +277,208 @@ landLeft' n (left, right)
     
 landRight' :: Birds -> Pole -> Maybe Pole
 landRight' n (left, right)
-    | abs ((left - (right + n) <= 3 = Just (left, right + n)
+    | abs (left - (right + n)) <= 3 = Just (left, right + n)
     | otherwise                     = Nothing
 
 -- See that, instead of returning 'Pole', these return 'Maybe Pole' taking care
 -- of the failure condition
+-- Nothing indicates the failure condition (the pole tumbles)
+
+poleEx5 = landLeft' 2 (0, 0)                    -- Just (2, 0)
+poleEx6 = landRight' 10 (0, 0)                  -- Nothing -- not Just (0, 10)
+
+-- Let us do a sequence of landings and fly-offs
+poleEx7 = return (0, 0) >>= landRight' 2 >>= landLeft' 2 >>= landRight' (-2)
+-- This is very similar to poleEx3 example given above
+-- Let us do the same using Monad 
+poleEx8 = return (0,0) >>= landLeft' 1 >>= 
+                            landRight' 4 >>= landLeft' (-1) >>= landRight' (-2)
+        -- Nothing
+
+-- poleEx8 is a very nice example of how one execution feeds into the other
+-- using the "bind" (>>=) function / operator.  Made possible by the use of 
+-- "Maybe" as a monad.
+
+-- Now, a function for ignoring (making the pole tumble, irrespective of birds)
+banana :: Pole -> Maybe Pole 
+banana _ = Nothing
+
+poleEx9 = return (0,0) >>= landLeft' 1 >>= banana >>= landRight' 2 -- Nothing
+-- Here, Just (1,0) is fed into banana, but we know banana ignores whatever
+-- that is fed in.  So, instead of using (>>=), we can use (>>)
+
+{-
+Recall on (>>)
+
+(>>) :: Monad m => m a -> m b -> m b
+m >> n = m >>= (\_ -> n)
+
+(Nothing >> Just 4)     == Nothing
+    Nothing >> Just 4
+    Nothing >>= (\_ -> Just 4)
+    Nothing
+    
+(Just 8 >> Nothing)     == Nothing 
+(Just 5 >> Just 6)      == Just 6 
+-}
+
+-- Replacing (>>=) banana with (>>) Nothing - both are essentially the same 
+poleEx10 = return (0,0) >>= landLeft' 1 >> Nothing >>= landRight' 2 -- Nothing
+
+-- Now, to do the routine task, instead of making use of the monad 
+-- Just to see how complicated and tedious the code turns out to be.
+-- L1, R4, L2, L1 
+routine :: Maybe Pole 
+routine = case landLeft' 1 (0,0) of 
+    Nothing -> Nothing
+    Just pole1 -> case landRight' 4 pole1 of
+        Nothing -> Nothing 
+        Just pole2 -> case landLeft' 2 pole2 of
+            Nothing -> Nothing 
+            Just pole3 -> landLeft' 1 pole3
+
+smart = return (0,0) >>= landLeft' 1 >>= landRight' 4 
+                     >>= landLeft' 2 >>= landLeft' 1 
+    -- Just (4,4)
+
+-- (>>=) helps in doing successive computations that might have failed! 
+    
+{-- 
+
+"do" notation
+
+Introduced in IO context.  But, not particular to IO alone.
+It can be used for any monad 
+
+-}
+
+
+monadEx1 = Just 3 >>= (\x -> Just (show x ++ "!"))              -- Just "3!"
+monadEx2 = Just 3 >>= (\x -> Just "!" >>= (\y -> Just (show x ++ y)))
+
+-- Without using the monad:
+monadLet1 = let x = 3; y = "!" in show x ++ y               -- "3!"
+
+-- Rewriting monadEx2
+monadEx3 = Just 3   >>= (\x -> 
+           Just "!" >>= (\y -> 
+           Just (show x ++ y)))
+
+-- Rewriting the same in do notation 
+-- Helps in removing the unnecessary and non-readable lambda notations 
+monadDo2 = do
+    x <- return 3
+    y <- return "!"
+    Just (show x ++ y)
+
+-- or, in particular 
+monadDo3 = do
+    x <- Just 3
+    y <- Just "!"
+    Just (show x ++ y)
+    
+{-
+
+"do" notation
+Every line is a monadic value 
+Just to inspect the result (<-) is used. The results are temporarily 
+extracted to the names on the left side 
+
+-}
+
+-- smart = return (0,0) >>= landLeft' 1 >>= landRight' 4 
+--                     >>= landLeft' 2 >>= landLeft' 1 
+     
+smartWithDo = do
+    start <- Just (0,0)
+    first <- landLeft' 1 start 
+    second <- landRight' 4 first
+    third <- landLeft' 2 second 
+    landLeft' 1 third 
+-- Just (4,4)
+    
+-- So, 'do' notation, with help of monad, makes code looks imperative (executing
+-- one line after another.  Rather, it is just sequential 
+
+smartWithDo1 = do
+    start <- Just (0,0)
+    first <- landLeft' 1 start 
+    second <- landRight' 4 first
+    Nothing
+    third <- landLeft' 2 second 
+    landLeft' 1 third 
+-- Nothing 
+-- failure case is handled using Maybe Nothing 
+
+-- Pattern matching in "do" 
+justFirst :: [a] -> Maybe a
+justFirst str = do
+    (x:xs) <- Just str
+    return x 
+    
+-- justFirst can be used as "safeHead"
+-- when the pattern match fails for [], the following is taken care of 
+-- "Nothing" will be the result
+
+{-
+5.
+
+fail :: (Monad m) => String -> m a  
+fail msg = error msg  
+
+-- the above is the default implementation for "fail"
+
+For Maybe, the implementation is overwritten with 
+fail _ = Nothing 
+
+-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
