@@ -2,6 +2,8 @@
 -- Chapter 12: A Fistful of Monads
 -- http://learnyouahaskell.com/a-fistful-of-monads
 
+import Control.Monad 
+
 {- 
 
 A recap:
@@ -226,6 +228,11 @@ monadMaybeEx3 = Nothing >>= \x -> return (x * 10)       -- Nothing
 
 -- Using the (>>=) bind function, (Maybe a) can be fed to (a -> Maybe a) fn.
 
+
+--------------------------------------------------------------------------------
+--                              Maybe Monad                                   --
+--------------------------------------------------------------------------------
+
 {-
 
 Maybe Monad - Explanation using an example
@@ -417,8 +424,10 @@ justFirst str = do
     return x 
     
 -- justFirst can be used as "safeHead"
--- when the pattern match fails for [], the following is taken care of 
+-- when the pattern match fails for [], "fail" function is called  
 -- "Nothing" will be the result
+
+
 
 {-
 5.
@@ -433,52 +442,320 @@ fail _ = Nothing
 
 -}
 
+--------------------------------------------------------------------------------
+--                              LIST Monad                                    --
+--------------------------------------------------------------------------------
+
+-- Maybe monad is for those values with failure context
+-- List monad is for those with non-deterministic computations
+-- 1 + 2 is always 3 
+-- If you want to add elements from two lists [1, 4] and [3, 7], the result 
+-- could be any of [4, 8, 7, 11] depending on which element of the first list 
+-- gets added with which of the second list
+
+-- Lists used as applicatie functor 
+listAppFunc1 = (*) <$> [1,2,3] <*> [10,100,1000] 
+
+{-
+ 
+Monad instance for list 
+
+                    instance Monad [] where 
+                        return x = [x]
+                        xs >> f = concat (map f xs)
+                        fail _ = [] 
 
 
+* return is the same as "pure" - putting the element in minimal context 
+* fail gives empty list 
+
+(>>=)
+    m a -> (a -> m b) -> m b 
+    (>>=) takes a value within context and a function which takes a normal value 
+    and gives another value within context 
+    The result will be a value within context (which can again be fed into 
+    another >>=)
+    
+    
+-}    
+
+listBind1 = [3, 4, 5] >>= \x -> [x, -x]
+-- Here xs is [3, 4, 5]
+--      f  is \x -> [x, -x]
+-- What (>>=) does is:
+--      concat (map f xs)  
+--      concat (map (\x -> [x, -x]) [3, 4, 5])
+--      concat [[3,-3],[4,-4],[5,-5]]
+--      [3,-3,4,-4,5,-5]
 
 
+-- Taking care of the failure case (which is [])
+emptyList1 = [] >>= \x -> ["bad","mad","rad"]
+emptyList2 = [1,2,3] >>= \x -> [] 
+
+-- Chaining the binds (>>=)
+chainList1 = [1,2] >>= \n -> ['a','b'] >>= \ch -> return (n,ch)
+-- [(1,'a'),(1,'b'),(2,'a'),(2,'b')]  
+-- [1, 2] gets bound to n and ['a', 'b'] gets bound to ch 
+
+-- The same chaining example, written using "do" notation
+listOfTuples :: [(Int,Char)]  
+listOfTuples = do  
+    n <- [1,2]  
+    ch <- ['a','b']  
+    return (n,ch) 
+
+-- The same, written as list comprehension
+listComph1 = [(n, ch) | n <- [1, 2], ch <- ['a', 'b']]      
+-- so, list comprehension is just a "syntactic sugar" for using lists as monads 
+
+-- List comprehension used for filtering
+listComph2 = [ x | x <- [1..50], '7' `elem` show x ]    -- [7, 17, 27, 37, 47]
 
 
+--------------------------------------------------------------------------------    
+--                          MonadPlus Typeclass                               --    
+--------------------------------------------------------------------------------    
+{-
+Typeclass Definition:
+
+class Monad m => MonadPlus m where 
+    mzero   :: m a
+    mplus   :: m a -> m a -> m a
+    
+-}
+
+-- mzero corresponds to mempty of Monoid 
+-- mplus corresponds to mappend of Monoid 
+-- Lists are Monoids, as well as Monads 
+
+{-
+MonadPlus Typeclass: List Instance definition 
+
+instance MonadPlus [] where 
+    mzero = []
+    mplus = (++)
+    
+-}
+
+{-
+There is a 'guard' function, in Control.Monad, defined as,
+
+guard :: (MonadPlus m) => Bool -> m () 
+guard True = return ()
+guard False = mzero
+
+-}    
+
+guardEx1 = guard (5 > 2) :: Maybe ()        -- Need to specify the output type 
+guardEx2 = guard (1 > 2) :: Maybe ()
+guardEx3 = guard (5 > 2) :: [] ()
+guardEx4 = guard (1 > 2) :: [] ()
+guardEx5 = guard (2 > 1) :: [()]
+
+-- Rewriting listComph2
+guardEx6 = [1..50] >>= (\x -> guard ('7' `elem` show x) >> return x)
+
+-- guard is always passed to (>>) and not to (>>=)
+-- We are interested in whether it fails or succeeds, We are not interested 
+-- in carrying the value ahead (anyway guard does not return any value)
+
+-- listComph2 written using do notation and 'guard'
+-- list comprehension filtering is equivalent of monad expression with guard 
+endingSevens :: [Int]
+endingSevens = do
+    x <- [1..50]
+    guard ('7' `elem` show x)           
+    return x     
+
+--------------------------------------------------------------------------------    
+--                          KNIGHT MOVEMENT EXAMPLE                           --
+-- Given a position on the chess board, can a knight move to a particular 
+-- square in exactly 3 moves?
+--------------------------------------------------------------------------------    
+
+type KnightPos = (Int, Int)                         -- Column, Row 
+
+moveKnight :: KnightPos -> [KnightPos]
+moveKnight (c, r) = do
+    (c', r') <- [(c+2,r-1),(c+2,r+1),(c-2,r-1),(c-2,r+1)  
+                ,(c+1,r-2),(c+1,r+2),(c-1,r-2),(c-1,r+2)  
+                ]
+    guard (c' `elem` [1..8] && r' `elem` [1..8])
+    return (c', r')
+
+-- moveKnight function, using a separate inner function for guard 
+moveKnight1 :: KnightPos -> [KnightPos]
+moveKnight1 (c, r) = filter onBoard possiblePos
+    where 
+    possiblePos = [(c+2,r-1),(c+2,r+1),(c-2,r-1),(c-2,r+1)  
+                ,(c+1,r-2),(c+1,r+2),(c-1,r-2),(c-1,r+2)  
+                ]
+    onBoard (c,r) = c `elem` [1..8] && r `elem` [1..8]      
+    
+-- same moveKnight function, rewritten using applicative functors and list 
+-- comprehension, instead of explicitly defining the positions     
+moveKnight2 :: KnightPos -> [KnightPos]
+moveKnight2 (c, r) = filter onBoard possiblePos
+    where 
+    cp = [(+), flip (-)] <*> [1, 2] <*> [c]
+    rp = [(+), flip (-)] <*> [1, 2] <*> [r]
+    possiblePos = [(x, y) | x <- cp, y <- rp, abs (c-x) /= abs (r-y)]
+    onBoard (x, y) = x `elem` [1..8] && y `elem` [1..8]    
+    
+-- Get all positions of Knight in exactly 3 moves     
+in3 :: KnightPos -> [KnightPos]  
+in3 start = do   
+    first <- moveKnight start  
+    second <- moveKnight first  
+    moveKnight second
+    
+-- same in3 using the bind function 
+in3' start = return start >>= moveKnight >>= moveKnight >>= moveKnight
+-- from one position, moveKnight gives possible positions, for each the further
+-- moveKnight calculates and gives new positions 
+
+-- Function that tells whether the knight can go from one postion to another 
+-- in exactly 3 moves.
+canReachIn3 :: KnightPos -> KnightPos -> Bool  
+canReachIn3 start end = end `elem` in3 start
+
+isReachable1 = canReachIn3 (6, 2) (6, 3)                      -- True 
+isReachable2 = canReachIn3 (1, 8) (8, 1)                      -- False 
+    
+--------------------------------------------------------------------------------    
+--                              Monad Laws                                    --
+--------------------------------------------------------------------------------    
+-- Just because a type is an instance of Monad typeclass, it is not a monad.
+-- The type has to obey Monad Laws to become a monad.
+-- Haskell cannot check for the laws, so the one who is writing the instance
+-- should make a point that any instance for Monad type class follows these laws
+
+{-
+1. Left Identity
+
+    return x >>= f is the same as f x
+
+    The first monad law states that if we take a value, put it in a default 
+    context with return and then feed it to a function by using >>=, it's the 
+    same as just taking the value and applying the function to it. 
+    
+2. Right Identity
+    
+    m >>= return is the same as m 
+    
+    The second law states that if we have a monadic value and we use >>= to 
+    feed it to return, the result is our original monadic value.
+    
+-- Left and Right Identity laws define how "return" should behave in a monad 
+    
+3. Associativity 
+    
+    (m >>= f) >>= g is the same as m >>= (\x -> f x >>= g)
+    
+    m is a monadic value
+    f and g are functions of the type (a -> m b)
+    
+    (m >>= f) >>= g
+    -- A monadic value is fed to f, which gives another monadic value, fed to g 
+    
+    m >>= (\x -> f x >>= g)
+    -- monadic value 'm' is fed to a function, that feeds result of f x to g 
+    
+-}
 
 
+-- The following two are the same.
+leftId11 = return 3 >>= (\x -> Just (x + 1000))
+leftId12 = (\x -> Just (x + 1000)) 3
 
+-- Similarly, the following two expressions produce same result.
+leftId21 = return "str" >>= (\x -> [x, x]) 
+leftId22 = (\x -> [x, x]) "str"
 
+rightId1 = Just "something" >>= (\x -> return x)        -- Just "something"
+rightId2 = [1,2,3] >>= (\x -> return x)                 -- [1,2,3]
+    -- xs >>= f = concat (map f xs)  
+    -- [1,2,3] >>= (\x -> return x)
+    -- concat (map (\x -> return x) [1,2,3])
+    -- concat [[1],[2],[3]]
+    -- [1,2,3]
+rightId3 = putStrLn "IO Context" >>= (\x -> return x)
 
+assoc1 = return (0,0) >>= landRight' 2 >>= landLeft' 2 >>= landRight' 2
+-- Just (2, 4)
 
+-- How assoc1 actually gets executed.
+assoc2 = ((return (0,0) >>= landRight' 2) >>= landLeft' 2) >>= landRight' 2 
+-- Just (2, 4)
 
+-- The other representation of assoc1 (right side of Law3)
 
+assoc3 = return (0,0) >>= (\x -> 
+        landRight' 2 x >>= (\y -> 
+        landLeft' 2 y >>= (\z -> 
+        landRight' 2 z))) 
+-- Just (2, 4)
 
+-- Same assoc3, written in "do" notation.
+assoc4 = do 
+    x <- return (0, 0)
+    y <- landRight' 2 x
+    z <- landLeft' 2 y
+    landRight' 2 z
+        
 
+--------------------------------------------------------------------------------    
+--                              Composition                                   --
+--------------------------------------------------------------------------------    
+        
+{-
 
+Composition (.) Definition for normal functions
 
+(.) :: (b -> c) -> (a -> b) -> (a -> c)  
+f . g = (\x -> f (g x))
 
+-}
 
+{-
 
+Composition (<=<) for monadic functions 
+  
+(<=<) :: (Monad m) => (b -> m c) -> (a -> m b) -> (a -> m c)
+f <=< g = (\x -> g x >= f) 
+  
+-}
 
+f x = [x, -x]
+g x = [x * 3, x * 2]
 
+-- new function fog is defined.
+fog = f <=< g 
 
+fgComp = fog 3        -- [9, -9, 6, -6]
 
+{-
+For monads, the nesting of operations should not matter. 
 
+    f <=< (g <=< h) 
+    
+    and 
+    
+    (f <=< g) <=< h
+    
+should give the same result.
 
+First Two Laws:
+    1. f <=< return == f
+    2. return <=< f == f 
+    
+Very similar to, (for normal functions)
 
+    1.  f . id == f 
+    2.  id. f  == f 
+    3.  f . (g . h) == (f . g) . h 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+-}
+    
+    
