@@ -658,8 +658,8 @@ Need to find examples for each of these laws.
 
 -- newtype
 -- getting back to the example of ZipList
-compreEx = [(+1),(*100),(*5)] <*> [1,2,3]  	-- gives out 9 elements as output
-zipEx	 = getZipList $ ZipList [(+1),(*100),(*5)] <*> ZipList [1,2,3]  
+compreEx = [(+1),(*100),(*5)] <*> [1,2,3]   -- gives out 9 elements as output
+zipEx    = getZipList $ ZipList [(+1),(*100),(*5)] <*> ZipList [1,2,3]  
 -- compreEx will have [2,3,4,100,200,300,5,10,15]
 -- zipEx will have [2,200,15]
 
@@ -706,20 +706,177 @@ Actual ZipList definition
    
 -}
 
+
+{-------------------------------------------------------------------------------
+                    Constraints with "newtype"
+--------------------------------------------------------------------------------
+
+1. Only one value constructor (the function, CharList in the above example)
+2. Only one field ([Char] in the above example)
+
+-------------------------------------------------------------------------------}
+
+-- With the "data" keyword:
+-- several value constructors and each can have more than one field.
+-- Examples:
+data Colour = Red | Orange | Blue | Yellow
+
+type Radius = Int
+type Length = Int
+type Breadth = Int 
+data Shape = Cirle Radius | Rectangle Length Breadth 
+
+data BoxType = BoxType Colour Shape
+
+--------------------------------------------------------------------------------
+
 newtype CharList = CharList { getCharList :: [Char] } deriving (Eq, Show)
 
-chLstEx1 = CharList "Cool!"			-- this has a Show instance (derived)
-chLstEx2 = getCharList chLstEx1		-- "Cool!"
+chLstEx1 = CharList "Cool!"         -- this has a Show instance (derived)
+chLstEx2 = getCharList chLstEx1     -- "Cool!"
 
-chLstEx3 = CharList "Hello" == CharList "Hello"		-- True
-chLstEx4 = CharList "Well" == CharList "Good"		-- False
+chLstEx3 = CharList "Hello" == CharList "Hello"     -- True
+chLstEx4 = CharList "Well" == CharList "Good"       -- False
 
-{--
+{-------------------------------------------------------------------------------
 
 type signatures
 
-CharList :: [Char] -> CharList  
-getCharList :: CharList -> [Char]  
+    CharList :: [Char] -> CharList  
+    getCharList :: CharList -> [Char]  
 
---}
+-------------------------------------------------------------------------------}
+
+-- Using "newtype" to make typeclass instances.
+
+{- 
+Functor typeclass defined as
+
+class Functor f where 
+    fmap :: (a -> b) -> f a -> f b 
+    
+meaning, Functor mandates the function "fmap" to be defined in type instance.
+
+For example,
+
+Maybe instance:
+
+instance Functor Maybe a where 
+    fmap :: (a -> b) -> Maybe a -> Maybe b 
+    ...
+    ... goes the implementation of fmap for Maybe type.
+    
+-}
+
+{-
+New Requirement:  Make a tuple an instance of Functor, which when fmap done,
+                  modifies only the first element.
+                  
+fmap (*3) (2, 3) == (6, 3)
+
+newtype comes to the rescue!
+-}
+
+newtype Pair b a = Pair {getPair :: (a, b)}
+
+instance Functor (Pair c) where
+    fmap f (Pair (x, y)) = Pair (f x, y)
+    -- Here, fmap type signature is (a -> b) -> Pair c a -> Pair c b 
+    -- see that (Pair c) took the place of "f" in the Functor class definition
+
+pairEx1 = getPair $ fmap (*5) $ Pair (1, 2)             -- (5, 2)
+pairEx2 = getPair $ fmap reverse $ Pair ("Yes", "No")   -- ("seY", "No")
+
+-- Laziness of "newtype"
+
+undef1 = undefined                             -- gets error when evaluated.
+firstElement = head [1, 2, undefined, 4, 5]    -- This gets 1; no error.
+-- Haskell evaluates expressions only when needed.
+
+data WrapInt = WrapInt {getWrapInt :: Int}
+
+discardMe :: WrapInt -> String
+discardMe (WrapInt _) = "Input Discarded! I am the Output"
+
+discard1 = discardMe $ WrapInt 5
+discard2 = discardMe $ WrapInt 3 
+discard3 = discardMe undefined          -- this creates exception on evaluation.
+
+{-
+Instead if discardMe is defined like this:
+
+    discardMe :: WrapInt -> String
+    discardMe _ = "Input Discarded! I am the Output"
+
+it would not create any exception for discard3.
+
+But, with the same definition, there is a way to impart laziness with "newtype"
+-}
+
+newtype WrapInt' = WrapInt' {getWrapInt' :: Int}
+
+discardMe' :: WrapInt' -> String
+discardMe' (WrapInt' _) = "Input Discarded! I am the Output"
+
+discard4 = discardMe' undefined         -- no exception; newtype laziness!
+
+{-
+    How it worked?
+    
+    Haskell treats the newtype as the underlying type itself, just knows that 
+    it has to wrap / unwrap into newtype while presenting.
+    
+    It knows that it will have only one constructor and one field, and that 
+    one field is "don't care" here - need not evaluate it, and it does not!
+    
+-}
+
+{-------------------------------------------------------------------------------
+            type        vs          newtype         vs          data
+-------------------------------------------------------------------------------}    
+
+-- type is for type synonym, for better readability
+-- internally, it is represented as exactly the same identical type 
+-- basically give another easy name for a difficult to write / read type.
+
+type IntList = [Int]
+intListAppend = ([1, 2, 3] :: [Int]) ++ ([4, 5, 6] :: IntList)
+-- [1,2,3,4,5,6]
+
+-- newtype:
+-- for taking existing types and wrapping it as new types.
+-- 1. to introduce laziness when evaluating the fields.
+-- 2. to make instances of certain type classes 
+-- examples to both of these uses are seen above.
+
+{-
+Above, CharList is defined as 
+
+    newtype CharList = CharList { getCharList :: [Char] }  
+    
+Operation like the one below, is not possible.
+
+    ("cannot be" :: [Char])  ++ ("appended" :: CharList)
+    
+-}
+
+-- The following is fine, still.
+charListAppend = ("Yes, to be " :: [Char])++(getCharList $ CharList "appended")
+
+{-
+    Remembering the "Record Syntax"
+        "getCharList" here is a record syntax.
+        gives an automatic function to get [Char] from a CharList.
+
+    Point to note:
+    
+    [Char] is an instance of Monad (and several other type classes)
+    CharList (the newtype defined) is not automatically made an instance.
+    The instances for the newtype has to be written manually.
+
+-}
+
+-- "data" keyword.
+-- for making one's own data type; no restrictions on the number of value 
+-- constructors and the number of fields in each of the value constructors.
 
