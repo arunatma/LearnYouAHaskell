@@ -880,3 +880,23 @@ charListAppend = ("Yes, to be " :: [Char])++(getCharList $ CharList "appended")
 -- for making one's own data type; no restrictions on the number of value 
 -- constructors and the number of fields in each of the value constructors.
 
+{-------------------------------------------------------------------------------
+								Monoids
+-------------------------------------------------------------------------------}
+{-
+
+Typeclass  - Present interface for types which have behaviours in common
+Example:
+	Eq : For all types that can be equated 
+	Ord: For all types that can be ordered
+	Functor: For all types that can be mapped over with a function 
+	Applicative Functor: For all types that can be mapped over with a function
+	                     in context.
+
+When a type is created:
+	See what all behaviour it can support (how it can act like)
+	Then, make it an instance of those typeclasses.
+	
+-}
+
+	
