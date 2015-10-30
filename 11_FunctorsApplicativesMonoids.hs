@@ -5,6 +5,7 @@
 import Data.Char
 import Data.List  
 import Control.Applicative
+import Data.Monoid
   
 -- Functors
 -- Functor is a typeclass
@@ -882,9 +883,7 @@ charListAppend = ("Yes, to be " :: [Char])++(getCharList $ CharList "appended")
 
 {-------------------------------------------------------------------------------
 								Monoids
--------------------------------------------------------------------------------}
-{-
-
+--------------------------------------------------------------------------------
 Typeclass  - Present interface for types which have behaviours in common
 Example:
 	Eq : For all types that can be equated 
@@ -899,4 +898,145 @@ When a type is created:
 	
 -}
 
+{------------------------------------------------------------------------------
+Building up a Monoid
+-------------------------------------------------------------------------------
+(*) takes two numbers and multiplies:
+		x * 1 = 1 * x = x
+
+(++) takes two arrays and concatenates
+		xs ++ [] = [] ++ xs = xs
+		
+Common Properties:
+- Both take two parameters
+- Both have the same type for inputs and outputs
+- Both has an identity (1 and []) which when operated with, gives the same value
+- Associativity: 3 * (4 * 5) == (3 * 4) * 5
+				 "ab" ++ ("cd" ++ "ef") == ("ab" ++ "cd") ++ "ef"
+		(-) and (/) are not associative
+		
+Above are the properties of the monoid
+	1. Existence of an identity (1 for *, 0 for +, [] for ++)
+	2. Associativity holds good
 	
+-------------------------------------------------------------------------------}
+
+{-------------------------------------------------------------------------------
+Monoid class definition:  (defined in Data.Monoid - make sure to import this)
+	
+		class Monoid m where
+			mempty :: m
+			mappend :: m -> m -> m
+			mconcat :: [m] -> m
+			mconcat = foldr mappend mempty
+			
+- So, Monoid mandates 3 functions to be implemented and gives a default 
+  implementation for one of those (mconcat)
+
+Concrete types can be made instances of Monoid, whereas in Applicative Functors
+and Functors, the type constructors that takes a single parameter are made 
+instances.
+
+mempty - does not take any input; it is a polymorphic constant.
+	   - this is the identity for a particular monoid
+mappend - this is just a binary operation; takes two monoid and gives out one
+mconcat - take a list of monoids and does the mappend between successive monoids
+		  and reduces them to a single monoid	   
+-------------------------------------------------------------------------------}
+
+{-------------------------------------------------------------------------------
+Monoid Laws:
+
+1. mempty `mappend` x == x
+2. x `mappend` mempty == x
+3. (x `mappend` y) `mappend` z == x `mappend` (y `mappend` z)
+
+Commutative property is NOT a requirement for a monoid
+    
+    a `mappend` b NOT NECESSARY to be equal to b `mappend` a
+        
+        Though, the commutative property holds good for 
+            multiplication  : 2 * 4 == 4 * 2 == 8
+            addition        : 1 + 4 == 4 + 1 == 5
+            lists concat    : "ab" ++ "cd" != "cd" ++ "ab"
+-------------------------------------------------------------------------------}
+
+{-------------------------------------------------------------------------------
+Monoid Instance for List
+
+instance Monoid [a] where
+	mempty = []
+	mappend = (++)
+
+-------------------------------------------------------------------------------}
+
+monoidEx1 = [1,2,3] `mappend` [4,5,6]               -- [1,2,3,4,5,6]
+monoidEx2 = ("ab" `mappend` "cd") `mappend` "ef"    -- "abcdef"
+monoidEx3 = "ab" `mappend` ("cd" `mappend` "ef")    -- "abcdef"
+monoidEx4 = mconcat ["all", "words", "combined"]    -- "allwordscombined"
+monoidEx5 = mconcat [[1,2], [3], [4]]               -- [1,2,3,4]
+-- monoidEx6 = mempty   (need to explicitly specify type)
+monoidEx7 = mempty :: [a]
+
+-- Integers are monoids, with respect to both (*) and (+)
+-- There exists more than one way for numbers to be an instance of Monoid 
+-- typeclass.  So, wrap the integers in "newtype" and make it an instance
+-- of Monoid, with different implementations.
+
+{-------------------------------------------------------------------------------
+Monoid Instances for Product and Sum    (Defined in Data.Monoid)
+
+newtype Product a = Product { getProduct :: a }
+    deriving (Eq, Ord, Show, Read, Bounded)
+    
+instance Num a => Monoid (Product a) where
+    mempty = Product 1
+    Product x `mappend` Product y = Product (x * y)
+-------------------------------------------------------------------------------}
+
+monoidProd1 = getProduct $ Product 4 `mappend` Product 5    -- 20
+monoidProd2 = getProduct $ Product 4 `mappend` Product 5 `mappend` Product 6 
+monoidProd3 = getProduct $ mconcat $ map Product $ [3,4,2]
+monoidProd4 = getProduct . mconcat . map Product $ [3,4,2]
+
+-- There is a similar implementation for "Sum"
+
+monoidSum1 = getSum $ Sum 4 `mappend` Sum 5                     -- 9
+monoidSum2 = getSum $ Sum 4 `mappend` Sum 5 `mappend` Sum 6     -- 15
+monoidSum3 = getSum $ mconcat $ map Sum $ [3,4,2]               -- 9
+monoidSum4 = getSum . mconcat . map Sum $ [3,4,2]               -- 9
+
+{-------------------------------------------------------------------------------
+Monoid Instances for Any and All (Defined in Data.Monoid)
+    (both are for the type Bool)
+    
+newtype Any = Any { getAny :: Bool }
+    deriving (Eq, Ord, Show, Read, Bounded)
+    
+instance Monoid Any where
+    mempty = Any False
+    Any x `mappend` Any y = Any (x || y)
+    
+newtype All = All { getAll :: Bool }
+    deriving (Eq, Ord, Show, Read, Bounded)
+    
+instance Monoid All where
+    mempty = All True
+    All x `mappend` All y = All (x && y)
+    
+-------------------------------------------------------------------------------}
+
+monoidAny1 = getAny $ Any True `mappend` Any False                      -- True
+monoidAny2 = getAny $ mempty `mappend` Any True                         -- True
+monoidAny3 = getAny $ mempty `mappend` mempty                           -- False
+monoidAny4 = getAny . mconcat . map Any $ [False, False, False, True]   -- True
+
+monoidAll1 = getAll $ All True `mappend` All False                      -- False
+monoidAll2 = getAll $ mempty `mappend` All True                         -- True
+monoidAll3 = getAll $ mempty `mappend` mempty                           -- True
+monoidAll4 = getAll . mconcat . map All $ [False, False, False, True]   -- False
+
+-- Instead of "Any" and "All", it is better to use "or" "and" functions, which
+-- does the same task.
+
+
