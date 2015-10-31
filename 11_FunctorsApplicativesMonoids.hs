@@ -1039,4 +1039,52 @@ monoidAll4 = getAll . mconcat . map All $ [False, False, False, True]   -- False
 -- Instead of "Any" and "All", it is better to use "or" "and" functions, which
 -- does the same task.
 
+--------------------------------------------------------------------------------
 
+compareEx1 = 1 `compare` 2                  -- LT
+compareEx2 = 'a' `compare` 'A'              -- GT
+
+-- see :info LT or :info Ordering
+-- data Ordering = LT | EQ | GT 
+-- Ordering is an instance of Bounded, Enum, Eq, Ord, Read, Show, Monoid classes
+
+{-------------------------------------------------------------------------------
+Monoid instance for Ordering:
+
+instance Monoid Ordering where
+    mempty = EQ
+    LT `mappend` _ = LT
+    EQ `mappend` y = y
+    GT `mappend` _ = GT
+
+* The value on the left is preserved, (except for EQ - for which, the other
+  parameter will be the result)
+* EQ is the identity value in Ordering Monoid  
+-------------------------------------------------------------------------------}
+
+monoidOrd1 = LT `mappend` GT                -- LT
+monoidOrd2 = GT `mappend` LT                -- GT
+monoidOrd3 = mempty `mappend` GT            -- GT
+monoidOrd4 = mempty `mappend` LT            -- LT
+
+-- Comparing two words
+-- Compare the lengths; If equal, only then compare alphabetically
+
+lengthCompare :: String -> String -> Ordering
+lengthCompare x y = if a == EQ then b else a
+    where   a = length x `compare` length y
+            b = x `compare` y
+
+-- Same using "let ... in" instead of "where"
+lengthCompare' :: String -> String -> Ordering
+lengthCompare' x y = let a = length x `compare` length y
+                         b = x `compare` y
+                    in if a == EQ then b else a 
+
+-- Same using the "monoid" instance, instead of an if-then-else expression
+lengthCompareM :: String -> String -> Ordering
+lengthCompareM x y = (length x `compare` length y) `mappend` (x `compare` y)
+-- only if (length x `compare` length y) is EQ, then (x `compare` y) is run!
+
+
+    
