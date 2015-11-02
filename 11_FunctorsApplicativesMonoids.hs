@@ -6,7 +6,7 @@ import Data.Char
 import Data.List  
 import Control.Applicative
 import Data.Monoid
-  
+ 
 -- Functors
 -- Functor is a typeclass
 -- Functors are things that can be mapped over (Ex: Lists, Maybe, Trees etc)
@@ -1086,5 +1086,155 @@ lengthCompareM :: String -> String -> Ordering
 lengthCompareM x y = (length x `compare` length y) `mappend` (x `compare` y)
 -- only if (length x `compare` length y) is EQ, then (x `compare` y) is run!
 
-
+-- Additional Requirement:
+-- Compare length; then compare number of vowels; then compare alphabetically
+lengthCompareV :: String -> String -> Ordering
+lengthCompareV x y = (length x `compare` length y) `mappend`
+                     (vowels x `compare` vowels y) `mappend`
+                     (x `compare` y)
+    where vowels = length . filter (`elem` "aeiou")
     
+lengthCompEx1 = lengthCompareV "same" "zest"               -- GT
+lengthCompEx2 = lengthCompareM "same" "zest"               -- LT
+-- use monoid comparison to compare, based on priority from the top to least
+
+{-------------------------------------------------------------------------------
+                            Maybe Monoid 
+-------------------------------------------------------------------------------}
+
+{-
+    Instance declaration:
+    
+    instance Monoid a => Monoid (Maybe a) where
+        mempty = Nothing
+        Nothing `mappend` m = m
+        m `mappend` Nothing = m 
+        Just m1 `mappend` Just m2 = Just (m1 `mappend` m2) 
+        
+    * Nothing is the identity for Maybe monoid.
+    * mappend "something" with Nothing, you get back "something"
+    * If you mappend Just x and Just y, (both x and y should themselve be a 
+      monoid, first of all), you would get x `mappend` y wrapped in "Just"
+      
+-}
+
+maybeMonoidEx1 = Nothing `mappend` Just (Sum 3)     -- Just (Sum {getSum = 3}) 
+maybeMonoidEx2 = Just [1,2,3] `mappend` Nothing         -- Just [1,2,3]
+maybeMonoidEx3 = Just LT `mappend` Just GT              -- Just LT 
+maybeMonoidEx4 = Just "conca" `mappend` Just "tenated"  -- Just "concatenated"
+
+-- Maybe monoid has a constraint that the contents should also be a monoid.
+-- So, we cannot do something like: 
+--          Nothing `mappend` Just 4            (4 is not an instance of monoid)
+-- So, we have "First" and "Last" monoid data types (actually newtypes).
+
+{-------------------------------------------------------------------------------
+                            First & Last Monoid 
+-------------------------------------------------------------------------------}
+{-
+
+    newtype First a = First {getFirst :: Maybe a}
+        deriving (Eq, Ord, Read, Show)
+        
+    newtype Last a = Last {getLast :: Maybe a}
+        deriving (Eq, Ord, Read, Show)    
+    
+    Instance declarations:  (see here, there is no class constraint, as above)
+    ----------------------
+    instance Monoid (First a) where
+        mempty = First Nothing
+        First (Just x) `mappend` _ = First (Just x)
+        First Nothing `mappend` x = x
+        
+    instance Monoid (Last a) where
+        mempty = Last Nothing
+        _ `mappend` Last (Just x) = Last (Just x)    
+        x `mappend` Last Nothing = x
+          
+-}
+                        
+firstMonoidEx1 = getFirst $ First (Just 1) `mappend` First (Just 2)  -- Just 1
+firstMonoidEx2 = getFirst $ First Nothing `mappend` First (Just 'b') -- Just 'b'
+firstMonoidEx3 = getFirst $ First (Just [1]) `mappend` First Nothing -- Just [1]
+firstMonoidEx4 = getFirst . mconcat . map First $ [Nothing, Just 9, Just 10]
+                                                                     -- Just 9
+
+lastMonoidEx1 = getLast $ Last (Just 1) `mappend` Last (Just 2)  -- Just 2
+lastMonoidEx2 = getLast $ Last Nothing `mappend` Last (Just 'b') -- Just 'b'
+lastMonoidEx3 = getLast $ Last (Just [1]) `mappend` Last Nothing -- Just [1]
+lastMonoidEx4 = getLast . mconcat . map Last $ [Nothing, Just 9, Just 10]
+                                                                 -- Just 10
+
+{-------------------------------------------------------------------------------
+                            Foldable Monoid 
+-------------------------------------------------------------------------------}
+{-
+
+Any data type that can be folded up into a single value can be made an 
+instance of "Foldable" type class.
+
+If foldr and foldl were to operate only on the list data structure, and 
+reduce them to a single value.
+         foldl :: (a -> b -> b ) -> b -> [a] -> b 
+But foldl and foldr operate on any data structure that is an instance of 
+Foldable.
+         foldl :: Foldable t => (a -> b -> b) -> b -> t a -> b
+
+What if we have something, that can operate on an arbitrary data structure
+containing multiple values and reduce them to a single value?
+-}
+
+foldEx1 = foldl (*) 1 [1, 2, 3]             -- 6
+foldEx2 = foldr (+) 0 [1, 2, 3]             -- 6
+foldEx3 = foldl (+) 2 (Just 5)              -- 7
+foldEx4 = foldr (&&) True (Just False)      -- False 
+
+-- This indicates "Maybe" too is an instance of Foldable.
+-- But, with Maybe, you can just do one fold. that's it.  We shall explore 
+-- Tree, which is a recursive data type (seen in chapter 8)
+
+data Tree a = Empty | Node a (Tree a) (Tree a) deriving (Eq, Show, Read)
+
+-- To make an instance of "Foldable", a data type instance should implement 
+-- a single function "foldMap"
+-- foldMap :: (Monoid m, Foldable t) => (a -> m) -> t a -> m 
+
+-- foldMap takes a function (a -> m) and a foldable structure t a 
+-- Apply the function on each element of t a, and produce monoid 'm' s which are 
+-- mappended together to form a single final 'm'
+
+-- Foldable instance for Tree:
+instance Foldable Tree where 
+    foldMap f Empty = mempty
+    foldMap f (Node x l r) = foldMap f l `mappend` 
+                             f x `mappend`
+                             foldMap f r 
+
+-- Functor instance for Tree (as done in Ch 8)
+instance Functor Tree where  
+    fmap f Empty = Empty
+    fmap f (Node x l r) = Node (f x) (fmap f l) (fmap f r) 
+                             
+-- fmap on a tree: apply the function on each node and the left, right subtrees
+-- foldMap: applies the function and binds all those together using 'mappend'
+
+testTree = Node 5 (Node 3 (Node 1 Empty Empty)  
+                          (Node 6 Empty Empty)  
+                  )  
+                  (Node 9 (Node 8 Empty Empty)  
+                          (Node 10 Empty Empty)  
+                  )
+
+-- Once the "Foldable" instance is written, using foldMap. foldr and foldl are
+-- automatically generated.
+
+foldTreeEx1 = foldl (+) 0 testTree      -- 42
+foldTreeEx2 = foldr (*) 1 testTree      -- 64800
+            
+-- To know, if the tree contains a particular value 
+foldTreeEx3 = getAny $ foldMap (\x -> Any $ x == 6) testTree    -- True
+foldTreeEx4 = getAny $ foldMap (\x -> Any $ x > 20) testTree    -- False
+foldTreeEx5 = getAll $ foldMap (\x -> All $ x < 20) testTree    -- True
+
+-- Convert the Tree into a list.
+foldTreeEx6 = foldMap (\x -> [x]) testTree
