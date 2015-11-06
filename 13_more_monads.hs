@@ -5,6 +5,11 @@
 -- Maybe and List monads covered in Ch12 - More monads in this chapter
 -- All are part of "mtl" package.
 
+import qualified Data.ByteString.Lazy as B
+import Data.Char
+import Data.Monoid 
+import Control.Monad.Writer
+
 {-
 To see what all packages installed:
 
@@ -79,3 +84,55 @@ findLength x = (length x, "Found Length")
 resultWithLog3 = ("Cricket", "Name of Sport.") `applyLog` findLength
 resultWithLog4 = ("Sparrow", "Name of Bird.") `applyLog` findLength
 
+-- Closely, looking at applyLog function
+-- (++) works on any kind of list; so the type of applyLog can be 
+-- applyLog :: (a, [c]) -> (a -> (b, [c])) -> (b, [c])
+
+-- Can 'applyLog' work on byteStrings? No, (++) function inside expects lists
+-- But both lists and bytestrings are monoids and have `mappend` defined.
+
+listEx1 = [99,104,105] `mappend` [104,117,97,104,117,97]
+byteStr1 = B.pack [99,104,105] `mappend` B.pack [104,117,97,104,117,97] 
+
+-- convert ascii to character in haskell 
+charStr1 = map chr listEx1                  -- "chihuahua"  (same as byteStr1)
+
+-- changing applyLog to work for monoid.
+applyLog' :: (Monoid m) => (a, m) -> (a -> (b, m)) -> (b, m)  
+applyLog' (x, log) f = (y, combinedLog)
+    where combinedLog = log `mappend` newLog
+          (y, newLog) = f x
+
+-- Now, the tuple can be (value, monoid) instead of (value, string) 
+
+type Runs = Sum Integer
+type Wicket = String
+
+getScore :: Wicket -> (Wicket, Runs)
+getScore "First" = ("Sachin", Sum (-25))
+getScore "Second" = ("Sehwag", Sum (-98))
+getScore "Third" = ("Dravid", Sum (-57))
+getScore _ = ("Others", Sum (-20))              -- Others score 20 runs each
+
+score1 = ("First", Sum 54) `applyLog'` getScore  -- ("Sachin",Sum {getSum = 29})
+score2 = ("Second", Sum 144) `applyLog'` getScore -- ("Sehwag",Sum {getSum = 46})
+score3 = ("Third", Sum 189) `applyLog'` getScore -- ("Dravid",Sum {getSum = 132})
+
+-- First Wicket fell at 54 runs; If Sachin scored 25 runs, the rest scored "29"
+-- Second Wicket fell at 144 runs; That's Sehwag who scored 98, rest scored 46 
+-- Here, the monoid (Sum) gets added up, instead of (++) concatenated.
+
+seqScore = ("Total", Sum 250) `applyLog'` getScore `applyLog'` getScore 
+                                                    -- ("Others", Sum (210))
+-- Out of total score of 250, if two people scoring 20 reduced, score is 210
+
+-- logNumber :: MonadWriter w m => Int -> (Int, w) -> m Int   
+logNumber x = writer (x, ["Got number: " ++ show x])  
+  
+-- multWithLog :: Writer [String] Int  
+{-
+multWithLog = do  
+    a <- logNumber 3  
+    b <- logNumber 5  
+    return (a*b)  
+-}    
