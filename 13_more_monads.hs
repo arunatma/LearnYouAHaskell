@@ -136,3 +136,4 @@ multWithLog = do
     b <- logNumber 5  
     return (a*b)  
 -}    
+
