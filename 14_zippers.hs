@@ -7,6 +7,9 @@
 -- Here, we need to create another tree which is similar to original tree and
 -- but only, slightly different, with a single value changed.
 
+-- needed for File System example.
+import Data.List (break)
+
 data Tree a = Empty | Node a (Tree a) (Tree a) deriving (Show, Eq)
 
 charTree :: Tree Char
@@ -183,6 +186,112 @@ topMost :: Zipper a -> Zipper a
 topMost (t, []) = (t, [])               -- If bs empty, we are already at top!
 topMost z       = topMost (goUp' z)     -- Else, go up once!
 
+{-------------------------------------------------------------------------------
+                    Zippers for Lists
+    Idea is to traverse through a list and remember the path which traversed.
+-------------------------------------------------------------------------------}
+-- A sample data type for implementing List
+-- data List a = Empty | Cons a (List a) deriving (Show, Read, Eq, Ord)
 
+-- The following list is same as 1:2:3:4:[] or 1:2:3:[4] or 1:[2,3,4]
+listEx1 = [1, 2, 3, 4]
 
+listEx2 = head listEx1 : tail listEx1           -- 1:[2,3,4] same as listEx1
 
+-- To make a zipper for lists, we need to have the list element along with 
+-- other elements following it in focus, with what we have not selected as 
+-- breadcrumbs
+
+-- The first one is the list which is in focus, the second one is the crumbs
+type ListZipper a = ([a], [a])
+
+goForward :: ListZipper a -> ListZipper a
+goForward (x:xs, bs) = (xs, x:bs)       -- Take head of list and put in crumbs
+
+goBack :: ListZipper a -> ListZipper a 
+goBack (xs, b:bs) = (b:xs, bs)          -- Take head of crumbs & attach to list.
+
+xs = listEx1 
+lzip1 = goForward (xs, [])              -- ([2,3,4], [1])
+lzip2 = goForward lzip1                 -- ([3,4], [2,1])
+lzip3 = goForward lzip2                 -- ([4], [3,2,1])
+
+lzip4 = goBack lzip3                    -- ([3,4], [2,1]) i.e lzip2
+
+-- The breadcrumbs are just the revers of the path that we travelled through 
+-- in the list. The recent travelled comes first in the breadcrumb.
+
+-- List Zippers can be used in text editors to store line strings and to get 
+-- the focus on the current line where the cursor is on.
+
+{-------------------------------------------------------------------------------
+                    File System using Zippers.
+-------------------------------------------------------------------------------}
+-- File: simplest unit of data, with an identifiable name.
+-- Folder: Collection of files and other foldrers; It too has a name.
+
+type Name = String                          -- name of a file
+type Data = String                          -- data contents of a file 
+
+-- A item of file system can be a file or a folder.
+data FSItem = File Name Data | Folder Name [FSItem] deriving (Show)
+
+-- Let us create a sample file system (starting with folder name root)
+curDisk :: FSItem  
+curDisk = 
+    Folder "root"   
+        [ File "file1.txt" "text contents"  
+        , File "file2.bin" "assume binary contents"  
+        , Folder "pics"  
+            [ File "pic1.jpg" "assume jpg file."  
+            , File "pic2.gif" "assume gif file."  
+            , File "pic3.bmp" "assume bmp file."  
+            ]  
+        , File "doc1.doc" "Possibly MS Word"  
+        , Folder "programs"  
+            [ File "app1.exe" "assume exe file"  
+            , File "test.dmg" "assume some dmg file"  
+            , File "app2.exe" "assume exe file"  
+            , Folder "source code"  
+                [ File "best_hs_prog.hs" "main = print (fix error)"  
+                , File "random.hs" "main = print 4"  
+                ]  
+            ]  
+        ]  
+
+-- A file system can just be thought of a tree (but with multiple nodes)
+-- This again is a hierarchial structure.
+
+-- Zipper for the FSItem
+-- To get the entire context, when the focus is on a single item, we need to 
+-- know the parent folder (if it is a file) or the folder itself, along with 
+-- the structure that is up, and the structure that is down in hierarchy.
+
+data FSCrumb = FSCrumb Name [FSItem] [FSItem] deriving (Show)
+
+-- type synonym for the file system zipper.
+type FSZipper = (FSItem, [FSCrumb])
+
+-- going up in a file system zipper.
+-- Get the first breadcrumb; All items preceding the focus and all items 
+-- following the focus (say, a single file) are in separate lists in that 
+-- breadcrumb. use it to get the folder information.
+
+-- Given a file, fsUp will point to the folder it is present in. 
+-- (and given a folder, it would point to the parent folder)
+fsUp :: FSZipper -> FSZipper
+fsUp (item, (FSCrumb name ls rs) : bs) = (Folder name (ls ++ [item] ++ rs), bs)
+
+-- Going to a specific file, collecting information about the path.
+-- Here, the assumption is the file we are searching on is in current folder.
+-- fsTo does not search across the folders.
+fsTo :: Name -> FSZipper -> FSZipper
+fsTo name (Folder folderName items, bs) = 
+    let (ls, item:rs) = break (nameIs name) items
+    in  (item, (FSCrumb folderName ls rs) : bs)
+    
+nameIs :: Name -> FSItem -> Bool
+nameIs name (Folder folderName _) = name == folderName  
+nameIs name (File fileName _) = name == fileName
+
+-- break function is from "Data.List"
