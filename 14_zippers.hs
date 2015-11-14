@@ -403,4 +403,54 @@ Note that here it has an empty list for breadcumbs
 
 -- This is not an in-place modification, returns a whole new object after 
 -- modification (almost same as original, but slightly modified)
+-- So, with this, the version information is maintained.  How it moves from one
+-- version to another and with what changes (and this is a general property of
+-- any data structure in Haskell because they are immutable)
 
+
+{-------------------------------------------------------------------------------
+                    Tree Zipper with Maybe for failure cases
+-------------------------------------------------------------------------------}
+-- goLeft' function above, rewritten using the type synonym "Zipper"
+goLeftz :: Zipper a -> Zipper a
+goLeftz (Node x l r, bs) = (l, (LeftCrumb x r) : bs)
+
+-- If we are already at the leftmost node and try executing goLeftz, it creates
+-- an error. Because goLeftz (Empty, bs) is undefined!
+
+-- Using Maybe monad to take care of the failure cases
+goLeftm :: Zipper a -> Maybe (Zipper a)
+goLeftm (Node x l r, bs) = Just (l, (LeftCrumb x r) : bs)
+goLeftm (Empty, _)      = Nothing
+
+goRightm :: Zipper a -> Maybe (Zipper a)
+goRightm (Node x l r, bs) = Just (r, (RightCrumb x l) : bs)
+goRightm (Empty, _)      = Nothing
+
+treeZipEx1 = goLeftm (Empty, [])                    -- Nothing
+treeZipEx2 = goLeftm (Node 'A' Empty Empty, [])     -- Just (Empty, [LeftCrumb 'A' Empty]
+
+-- goUp to fail gracefully
+goUpm :: Zipper a -> Maybe (Zipper a)  
+goUpm (t, LeftCrumb x r:bs) = Just (Node x t r, bs)  
+goUpm (t, RightCrumb x l:bs) = Just (Node x l t, bs)  
+goUpm (_, []) = Nothing  
+-- If someone tries to do a goUpm, with no breadcrumbs in the list (meaning, it
+-- is the topmost one, then, the failure case triggered, "Nothing" is got as o/p
+
+-- chaining (when there was no failure case consideration)
+normalTree = (charTree, []) -: goLeft' -: goRight'
+monadTree = return (charTree, []) >>= goLeftm >>= goRightm
+-- (>>=) Takes a value within context, applies function and returns output
+-- conforming to the context
+
+coolTree = Node 1 Empty (Node 3 Empty Empty)  
+coolTreeR1 = return (coolTree,[]) >>= goRight  
+    -- Just (Node 3 Empty Empty, [RightCrumb 1 Empty])  
+coolTreeR2 = return (coolTree,[]) >>= goRight >>= goRight  
+    -- Just (Empty, [RightCrumb 3 Empty, RightCrumb 1 Empty])  
+coolTreeR3 = return (coolTree,[]) >>= goRight >>= goRight >>= goRight  
+    -- Nothing  
+
+
+    
