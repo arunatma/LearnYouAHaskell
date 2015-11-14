@@ -295,3 +295,112 @@ nameIs name (Folder folderName _) = name == folderName
 nameIs name (File fileName _) = name == fileName
 
 -- break function is from "Data.List"
+-- goes through the list and keeps checking whether the name matches for each
+-- item (using nameIs function) - output: a tuple of two lists, the first one 
+-- containing all the preceding non-matches, and the second one containing the
+-- match and the following elements.
+
+-- Once (ls, item:rs) is got from a folder, make FSZipper using the item and
+-- the crumb containing the foldername pre-match elements and post-match elems.
+
+{-------------------------------------------------------------------------------
+        Traversing through the file system
+-------------------------------------------------------------------------------}
+
+focusTo_pics = (curDisk, []) -: fsTo "pics"
+{-
+(Folder "pics" [File "pic1.jpg" "assume jpg file.",
+                File "pic2.gif" "assume gif file.",
+                File "pic3.bmp" "assume bmp file."],
+    [FSCrumb "root" [File "file1.txt" "text contents",
+                     File "file2.bin" "assume binary contents"
+                    ] 
+                    [File "doc1.doc" "Possibly MS Word",
+                     Folder "programs" 
+                        [File "app1.exe" "assume exe file",
+                         File "test.dmg" "assume some dmg file",
+                         File "app2.exe" "assume exe file",
+                         Folder "source code" 
+                            [File "best_hs_prog.hs" "main = print (fix error)",
+                             File "random.hs" "main = print 4"
+                            ]
+                        ]
+                    ]
+    ]
+)
+-}
+
+-- See, how the item and breadcrumbs rearrange, if the focus is on pic3.bmp
+focusTo_pic3 = (curDisk, []) -: fsTo "pics" -: fsTo "pic3.bmp"
+{-
+(File "pic3.bmp" "assume bmp file.", 
+    [FSCrumb "pics" [File "pic1.jpg" "assume jpg file.",
+                     File "pic2.gif" "assume gif file."
+                    ] 
+                    []
+                    ,
+     FSCrumb "root" [File "file1.txt""text contents",
+                     File "file2.bin" "assume binary contents"
+                    ] 
+                    [File "doc1.doc" "Possibly MS Word",
+                     Folder "programs" 
+                        [File "app1.exe" "assume exe file",
+                         File "test.dmg" "assume some dmg file",
+                         File "app2.exe" "assume exe file",
+                         Folder "source code" 
+                            [File "best_hs_prog.hs" "main = print (fix error)",
+                             File "random.hs" "main = print 4"
+                            ]
+                        ]
+                    ]
+    ]
+)
+-}
+
+-- shifting focus to pic2.gif, using information from focusTo_pic3
+focusTo_pic2 = focusTo_pic3 -: fsUp -: fsTo "pic2.gif"
+
+{-------------------------------------------------------------------------------
+                    File System Manipulation
+-------------------------------------------------------------------------------}
+-- Renaming a currently focussed file / folder
+fsRename :: Name -> FSZipper -> FSZipper
+fsRename newName (Folder folderName items, bs) = (Folder newName items, bs)
+fsRename newName (File fileName content, bs) = (File newName content, bs)
+
+-- rename pic2.gif as pic22.gif
+focusTo_pic22 = fsRename "pic22.gif" focusTo_pic2
+
+-- Making a new file (works only if the focus is on the folder - not file)
+newFile :: FSItem -> FSZipper -> FSZipper
+newFile item (Folder folderName items, bs)= (Folder folderName (item:items), bs)
+
+-- add a new file "pic4.jpg" to "pics" folder and move back up
+rootPic4added = (curDisk, []) -: fsTo "pics" -: 
+    newFile (File "pic4.jpg" "pic4 here") -: fsUp
+
+{-
+Note that here it has an empty list for breadcumbs
+
+(Folder "root" [File "file1.txt" "text contents",
+                File "file2.bin" "assume binary contents",
+                Folder "pics" [File "pic4.jpg" "pic4 here",
+                               File "pic1.jpg" "assume jpg file.",
+                               File "pic2.gif" "assume gif file.",
+                               File "pic3.bmp" "assume bmp file."],
+                File "doc1.doc" "Possibly MS Word",
+                Folder "programs" [File "app1.exe" "assume exe file",
+                                   File "test.dmg" "assume some dmg file",
+                                   File "app2.exe" "assume exe file",
+                                   Folder "source code" [File "best_hs_prog.hs" "main = print (fix error)",
+                                                         File "random.hs" "main = print 4"
+                                                        ]
+                                  ]
+               ],
+               []
+)
+-}
+
+-- This is not an in-place modification, returns a whole new object after 
+-- modification (almost same as original, but slightly modified)
+
