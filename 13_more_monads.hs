@@ -137,3 +137,19 @@ multWithLog = do
     return (a*b)  
 -}    
 
+{-------------------------------------------------------------------------------
+In this chapter:
+    1. Writer Monad (to be skipped, because the contents in book are out dated)
+    2. Difference List
+    3. Reader Monad
+    4. State Monad
+    5. Monadic functions
+        liftM
+        ap
+        liftA2
+        liftM2 to liftM5
+        join
+        filterM
+    6. Safe RPN Calculator
+
+-------------------------------------------------------------------------------}
