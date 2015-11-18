@@ -4,11 +4,15 @@
 
 -- Maybe and List monads covered in Ch12 - More monads in this chapter
 -- All are part of "mtl" package.
+-- {-# LANGUAGE DeriveFunctor #-}
+-- {-# LANGUAGE DeriveApplicative #-}
 
 import qualified Data.ByteString.Lazy as B
 import Data.Char
 import Data.Monoid 
 import Control.Monad.Writer
+import Control.Applicative (Applicative(..))
+import Control.Monad       (liftM, ap)
 
 {-
 To see what all packages installed:
@@ -126,17 +130,96 @@ seqScore = ("Total", Sum 250) `applyLog'` getScore `applyLog'` getScore
                                                     -- ("Others", Sum (210))
 -- Out of total score of 250, if two people scoring 20 reduced, score is 210
 
--- logNumber :: MonadWriter w m => Int -> (Int, w) -> m Int   
-logNumber x = writer (x, ["Got number: " ++ show x])  
+-- The writer in this chapter is defined in old-fashion way. For the sake of
+-- compliance with the chapter, we shall use the same.
+-- Since we have Writer and runWriter defined in-built in a different way, we 
+-- shall use Writer' and runWriter'
+
+newtype Writer' w a = Writer' { runWriter' :: (a, w) } 
+ 
+-- The following Functor and Applicative instances are taken from 
+-- https://wiki.haskell.org/Functor-Applicative-Monad_Proposal  
+-- In order to write a Monad instance, one has to already written the Functor 
+-- and Applicative instances for the same.
+
+instance (Monoid w) => Functor (Writer' w) where
+    fmap = liftM
+ 
+instance (Monoid w) => Applicative (Writer' w) where
+    pure x = Writer' (x, mempty)
+    (<*>) = ap
+    
+instance (Monoid w) => Monad (Writer' w) where 
+    return x = Writer' (x, mempty)
+    (Writer' (x, v)) >>= f = let 
+        (Writer' (y, v')) = f x
+        in Writer' (y, v `mappend` v')
+    
+-- the same instance above could also be defined as follows:
+-- as defined in http://dev.stephendiehl.com/hask/
+newtype Writer'' w a = Writer'' { runWriter'' :: (a, w) } 
+
+instance (Monoid w) => Functor (Writer'' w) where
+    fmap = liftM
+ 
+instance (Monoid w) => Applicative (Writer'' w) where
+    pure x = Writer'' (x, mempty)
+    (<*>) = ap
+    
+instance (Monoid w) => Monad (Writer'' w) where
+    return a = Writer'' (a, mempty)
+    m >>= f = (Writer'' (y, v `mappend` v')) where 
+        (x, v) = runWriter'' m
+        (y, v') = runWriter'' (f x)
+      
+{- Inspecting the instance for Writer':
+
+    >>= is the same as applyLog, instead of presenting the result as tuple, 
+           the result is now presented in the wrapped Writer' newtype
+    return is to put the value in minimal context. Here that is (a, mempty)
+    
+-}
+
+writerEx1 = runWriter' (return 3 :: Writer' String Int)  -- (3, "")
+writerEx2 = runWriter' (return 5 :: Writer' [Int] Int)   -- (3, [])
+writerEx3 = runWriter' (return 'a' :: Writer' Any Char) 
+    -- ('a', Any {getAny = False})
+writerEx4 = runWriter' (return 7 :: Writer' (Sum Int) Int)
+    -- (7, Sum {getSum = 0})
+writerEx5 = runWriter' (return 9 :: Writer' (Product Int) Int)
+    -- (9, Product {getProduct = 1})
+
+    
+logNumber :: Int -> Writer' [String] Int
+logNumber x = Writer' (x, ["Got number: " ++ show x])  
   
--- multWithLog :: Writer [String] Int  
-{-
+multWithLog :: Writer' [String] Int
 multWithLog = do  
     a <- logNumber 3  
     b <- logNumber 5  
     return (a*b)  
--}    
+    
+logAppendResult = runWriter' multWithLog 
+-- (15,["Got number: 3","Got number: 5"])
 
+{-
+    tell is of the type signature: (in Control.MonadWriter)
+    tell :: MonadWriter w m => w -> m () 
+-}
+
+-- Need to implement tell' with the following type signature.
+-- tell' :: Monoid w => w -> Writer' w () 
+
+multWithLog1 :: Writer' [String] Int  
+multWithLog1 = do  
+    a <- logNumber 3  
+    b <- logNumber 5  
+    --tell ["Gonna multiply these two"]  
+    return (a*b)  
+    
+logAppendResult1 = runWriter' multWithLog1 
+
+    
 {-------------------------------------------------------------------------------
 In this chapter:
     1. Writer Monad (to be skipped, because the contents in book are out dated)
@@ -153,3 +236,5 @@ In this chapter:
     6. Safe RPN Calculator
 
 -------------------------------------------------------------------------------}
+
+-- Difference Lists
