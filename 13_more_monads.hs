@@ -4,8 +4,11 @@
 
 -- Maybe and List monads covered in Ch12 - More monads in this chapter
 -- All are part of "mtl" package.
--- {-# LANGUAGE DeriveFunctor #-}
--- {-# LANGUAGE DeriveApplicative #-}
+
+{- 
+    The following pragma help derive automatic functor classes
+    {-# LANGUAGE DeriveFunctor #-}
+-}
 
 import qualified Data.ByteString.Lazy as B
 import Data.Char
@@ -38,6 +41,26 @@ C:\> ghc-pkg list
         ...
         ...
 -}
+
+
+
+{-------------------------------------------------------------------------------
+In this chapter:
+    1. Writer Monad  (new functions implemented to make book examples work)
+    2. Difference List
+    3. Reader Monad
+    4. State Monad
+    5. Monadic functions
+        liftM
+        ap
+        liftA2
+        liftM2 to liftM5
+        join
+        filterM
+    6. Safe RPN Calculator
+
+-------------------------------------------------------------------------------}
+
 
 --------------------------------------------------------------------------------
 --                          Writer  Monad                                     --    
@@ -207,34 +230,173 @@ logAppendResult = runWriter' multWithLog
     tell :: MonadWriter w m => w -> m () 
 -}
 
--- Need to implement tell' with the following type signature.
--- tell' :: Monoid w => w -> Writer' w () 
+-- Implementing tell function, to match the book version.
+tell' :: Monoid w => w -> Writer' w () 
+tell' w = Writer' ((), w)
 
 multWithLog1 :: Writer' [String] Int  
 multWithLog1 = do  
     a <- logNumber 3  
     b <- logNumber 5  
-    --tell ["Gonna multiply these two"]  
+    tell' ["Gonna multiply these two"]  
     return (a*b)  
     
 logAppendResult1 = runWriter' multWithLog1 
+-- (15,["Got number: 3","Got number: 5","Gonna multiply these two"])
 
-    
+
 {-------------------------------------------------------------------------------
-In this chapter:
-    1. Writer Monad (to be skipped, because the contents in book are out dated)
-    2. Difference List
-    3. Reader Monad
-    4. State Monad
-    5. Monadic functions
-        liftM
-        ap
-        liftA2
-        liftM2 to liftM5
-        join
-        filterM
-    6. Safe RPN Calculator
+    GCD of x and y: The biggest number that divides both x and y.
+    Euclid's Algorithm to find GCD of two numbers:
+        1. Divide bigger number (x) by smaller number (y) - take reminder (r)
+        2. Now divide y by r - take reminder.
+        3. Keep doing till you get one of the numbers as 0, the other is GCD.
+-------------------------------------------------------------------------------}
+gcd' :: Int -> Int -> Int
+gcd' a b 
+    | b == 0    = a
+    | otherwise = gcd' b (a `mod` b)
+        
+-- Incorporating log to gcd' - to see the steps it is taking.
+gcd'' :: Int -> Int -> Writer' [String] Int  
+gcd'' a b  
+    | b == 0 = do  
+        tell' ["Finished with " ++ show a]      -- Stitch Final Log
+        return a                                -- Final Answer
+    | otherwise = do  
+        -- The incremental log (gets added as a string inside list)
+        tell' [show a ++ " mod " ++ show b ++ " = " ++ show (a `mod` b)]  
+        gcd'' b (a `mod` b)                     -- this returns a Writer' monad
+        
+-- (Example from wikipedia page)
+-- https://en.wikipedia.org/wiki/Euclidean_algorithm        
+gcdEx1 = runWriter' $ gcd'' 1071 462     
+{- 
+    (21, ["1071 mod 462  = 147",
+         "462 mod 147   = 21",
+         "147 mod 21    = 0",
+         "Finished with 21"
+        ]
+    )
+-}
 
+-- get only the result.
+valGcdEx1 = fst gcdEx1
+
+-- get only the logs (on to the standard output)
+logGcdEx1 = mapM_ putStrLn (snd gcdEx1)
+
+{-------------------------------------------------------------------------------
+        Fast and Slow appending in the lists
 -------------------------------------------------------------------------------}
 
--- Difference Lists
+{- 
+Fast and Slow Lists.
+In gcd'' function, the logging is fast because the list appending looks like:
+    a ++ (b ++ (c ++ (d ++ (e ++ f))))  
+
+Slow Append:
+    ((((a ++ b) ++ c) ++ d) ++ e) ++ f  
+    
+-}
+
+gcdReverse :: Int -> Int -> Writer' [String] Int  
+gcdReverse a b  
+    | b == 0 = do  
+        tell' ["Finished with " ++ show a]  
+        return a  
+    | otherwise = do  
+        result <- gcdReverse b (a `mod` b)  
+        tell' [show a ++ " mod " ++ show b ++ " = " ++ show (a `mod` b)]  
+        return result     
+    
+-- gcdReverse is slow because it constructs lists in the following fashion.
+--  ((((a ++ b) ++ c) ++ d) ++ e) ++ f  
+
+gcdEx2 = runWriter' $ gcdReverse 1071 462     
+{- 
+    (21, ["Finished with 21",
+          "147 mod 21   = 0",
+          "462 mod 147  = 21",
+          "1071 mod 462 = 147"
+         ]
+    )
+-}
+
+{-------------------------------------------------------------------------------
+        Difference Lists.
+        
+        Need:  Lists can be slow if appended in a certain way.
+               We need a data structure that can efficiently take care of 
+               appending!
+               
+        Difference List
+            Equivalent DL of [1, 2, 3] is \xs -> [1, 2, 3] ++ xs 
+            Equivalent DL of []        is \xs -> [] ++ xs 
+            
+            So, different list is actually a function of type [a] -> [a]
+            
+        Efficient appeding:
+            f `append` g = \xs -> f (g xs)
+            
+-------------------------------------------------------------------------------}
+
+f = ("first " ++)
+g = ("second " ++)
+-- the following line is commented as we have not implemented `mappend` yet.
+-- h = f `mappend` g    -- equivalent of \xs -> "first " ++ ("second " ++ xs)
+
+-- To make an instance of Monoid or Monad, we need to define xs++ as a newtype.
+newtype DiffList a = DiffList { getDiffList :: [a] -> [a] }
+
+toDiffList :: [a] -> DiffList a  
+toDiffList xs = DiffList (xs++)  
+  
+fromDiffList :: DiffList a -> [a]  
+fromDiffList (DiffList f) = f []            -- (xs ++ ) [] which is [xs]
+
+-- Monoid instance for DiffList.
+instance Monoid (DiffList a) where 
+    mempty = DiffList (\xs -> [] ++ xs)     -- add the given xs to empty list
+    (DiffList f) `mappend` (DiffList g) = DiffList (\xs -> f (g xs))
+    
+-- this will do [1..4] ++ ([5..10] ++ [11..20])
+diffEx1 = fromDiffList (toDiffList [1..4] `mappend` toDiffList [5..10]
+            `mappend` toDiffList [11..20])
+
+-- Rewriting gcdReverse using the DiffList - to improve efficiency            
+gcdReverse' :: Int -> Int -> Writer' (DiffList String) Int  
+gcdReverse' a b  
+    | b == 0 = do  
+        tell' (toDiffList ["Finished with " ++ show a])  
+        return a  
+    | otherwise = do  
+        result <- gcdReverse' b (a `mod` b)  
+        tell' (toDiffList [show a ++ " mod " ++ show b ++ " = " ++ show (a `mod` b)])  
+        return result              
+
+valGcdEx2 = fst $ runWriter' $ gcdReverse' 1000 300        
+logGcdEx2 = fromDiffList $ snd $ runWriter' $ gcdReverse' 1000 300     
+
+-- Comparing the performances!
+
+cnt = 500000 
+
+finalCountDown :: Int -> Writer' (DiffList String) ()  
+finalCountDown 0 = do  
+    tell' (toDiffList ["0"])  
+finalCountDown x = do  
+    finalCountDown (x-1)  
+    tell' (toDiffList [show x])
+
+fastPrint = mapM_ putStrLn . fromDiffList. snd . runWriter' $ finalCountDown cnt
+    
+finalCountDown' :: Int -> Writer' [String] ()  
+finalCountDown' 0 = do  
+    tell' ["0"]  
+finalCountDown' x = do  
+    finalCountDown' (x-1)  
+    tell' [show x]
+    
+slowPrint = mapM_ putStrLn . snd . runWriter' $ finalCountDown' cnt      
+
