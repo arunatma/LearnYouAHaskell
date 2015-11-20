@@ -400,3 +400,60 @@ finalCountDown' x = do
     
 slowPrint = mapM_ putStrLn . snd . runWriter' $ finalCountDown' cnt      
 
+{-------------------------------------------------------------------------------
+            Functions ((->) r)  as a monad.  (Reader Monad)
+-------------------------------------------------------------------------------}
+
+-- Functions are Functors.
+f1 = (*5)
+g1 = (+3)
+h1 = (fmap f1 g1)       -- equivalent of h1 x = f1 (g1 x)
+v1 = h1 8               -- 55       i.e. (*5)((+3) 8) = (*5) 11 = 55 
+
+-- Functions are Applicatives
+f2 = (*5)
+g2 = (+3)
+h2 = (+)  <$> f2 <*> g2 -- equivalent of h2 x = (f2 x) + (g2 x)
+v2 = h2 8               -- 51       i.e. ((*5) 8) + ((+3) 8) = 40 + 11 = 51
+
+{-
+
+Monand instance for (->) r  - Located in Control.Monad.Instances
+
+instance Monad ((->) r) where  
+    return x = \_ -> x  
+    h >>= f = \w -> f (h w) w  
+   
+* implementation of return is same as that of "pure" for applicative.
+* (>>=) - Feeding a function h to another function f 
+        - The result is also a function (here it is defined as the lambda fn)
+        - Need to take the value out of the monad 'h' - which is done by 
+          applying the function h to w (h w)
+        - This result (h w) gets applied by f which is f (h w) which will be 
+          a function (say ff) in this case.
+        - And ff gets applied on to w.  
+        - Effectively f is a function that takes 2 arguments!
+-}
+
+-- Replicating the applicative functor (h2) above.
+-- But now, uses the concept of function as monad.
+funcAsMonad :: Int -> Int
+funcAsMonad = do
+    a <- (*5)
+    b <- (+3)
+    return (a + b)
+
+v3 = funcAsMonad 8              -- 51 (same as v2)
+
+-- This function monad is called the reader monad.
+-- All functions here read from a common source.  See below:
+
+funcUsingLet :: Int -> Int 
+funcUsingLet x = let
+    a = (*5) x
+    b = (+3) x
+    in (a + b)
+    
+v4 = funcUsingLet 8             -- 51 (same as v2 and v3)
+
+    
