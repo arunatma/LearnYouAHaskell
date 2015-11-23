@@ -21,9 +21,7 @@ dropEvery _ [] = []
 dropEvery n xs = take (n - 1) xs ++ dropEvery n (drop n xs)
 
 -- A much shorter solution
---getLastManSimple :: Int -> Int
 getLastManSimple n = (2 * n - p) `mod` p
-	where p = nextHighPower2 n
+	where p =  nextHighPower2 n
 
---nextHighPower2 :: Int -> Integer
-nextHighPower2 n = 2 ^ (ceiling $ (log n) / (log 2))
+nextHighPower2 n =  (2 ^ (ceiling $ (log n) / (log 2)))

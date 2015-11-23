@@ -16,6 +16,8 @@ import Data.Monoid
 import Control.Monad.Writer
 import Control.Applicative (Applicative(..))
 import Control.Monad       (liftM, ap)
+import System.Random
+import Control.Monad.State
 
 {-
 To see what all packages installed:
@@ -456,4 +458,178 @@ funcUsingLet x = let
     
 v4 = funcUsingLet 8             -- 51 (same as v2 and v3)
 
+{-------------------------------------------------------------------------------
+                State Monad.
+-------------------------------------------------------------------------------}                
     
+-- In Chapter 9: Input / Output, we dealt with random numbers.
+-- Since Haskell is a pure functional language, for the same function call with 
+-- the same input, it will give the same result always.
+-- So, to get different random numbers, we needed to pass on the random number 
+-- generator to each call, which is returned when 'random' function is called.
+-- So, you set a seed, and for that seed, you always get the same sequence of 
+-- random numbers (which is same as any other language)
+
+threeCoins :: StdGen -> (Bool, Bool, Bool)
+threeCoins gen = 
+    let (firstCoin, newGen) = random gen
+        (secondCoin, newGen') = random newGen
+        (thirdCoin, newGen'') = random newGen'
+    in (firstCoin, secondCoin, thirdCoin)
+-- (need System.Random module to be imported, for 'random' is defined there)
+
+{-
+    Stateful Computation:
+        s -> (a, s)
+    
+    Take a state, return a new value, along with the new state.
+
+    Assignment in imperative languages:
+        * Can be thought of as stateful computation
+        * a = 5
+        * This takes the entire context (existing binding and values), 
+          returns the value 'a', along with the new context (previous binding 
+          and values, with a new binding of a = 5)
+          
+-}
+
+{-
+    Implementation of Stack using a list.
+-}
+
+type Stack = [Int]
+
+pop :: Stack -> (Int, Stack)
+pop (x:xs) = (x, xs)
+
+push :: Int -> Stack -> ((), Stack)
+push x xs = ((), x:xs)              -- It could well be     push x xs = x:xs 
+                                    -- Kept like this, coz we can covert this 
+                                    -- to state type later.
+                                    
+
+-- Okay, let us take a stack, push some elements and pop a few elements 
+stackOpr :: Stack -> ((), Stack)
+stackOpr stack = let
+    ((), stack1) = push 1 stack                 -- ((), 1:xs) 
+    ((), stack2) = push 2 stack1                -- ((), 2:1:xs)
+    (x, stack3) = pop stack2                    -- (2, 1:xs)
+    in push 4 stack3                            -- ((), 4:1:xs)
+    
+newStack = stackOpr [7,8,9]                     -- ((), [4,1,7,8,9])
+
+{-
+    Ideally, we should not have worried about the previous state, and gone 
+    about doing what we intended to do.
+    
+    stackOpr = do
+        push 1
+        push 2
+        pop 
+        push 4
+        
+    For this ease, presenting the State Monad.
+-}
+
+{-------------------------------------------------------------------------------
+    Erstwhile definitions in Control.Monad.State
+    
+    newtype State s a = State { runState :: s -> (a, s) }
+    
+    runState was of the type, 
+    runState :: State s a -> s -> (a, s)   
+    
+Similar to how the definitions for "Writer" are changed to "WriterT" Monad 
+Tranformer, here 'State' newtype does not exist any more.  Now, the same 
+functionality is provided by the "StateT"
+
+So, to be in alignment with the book example, rewriting the State definitions 
+as those existed, when the book was written.
+
+-------------------------------------------------------------------------------}
+
+newtype State' s a = State' { runState' :: s -> (a, s) }
+
+instance Functor (State' s) where
+    fmap = liftM
+ 
+instance Applicative (State' s) where
+    pure x = State' $ \s -> (x, s)
+    (<*>) = ap
+
+instance Monad (State' s) where
+    return x = State' $ \s -> (x, s)
+    (State' h) >>= f = 
+        State' $ \s -> let (a, newState) = h s  
+                           (State' g) = f a  
+                       in  g newState 
+
+
+-- Rewriting the push and pop functions using State'
+pop' :: State' Stack Int  
+pop' = State' $ \(x:xs) -> (x, xs)  
+  
+push' :: Int -> State' Stack ()  
+push' a = State' $ \xs -> ((), a:xs)              
+
+stackOpr' :: State' Stack Int  
+stackOpr' = do  
+    push' 1  
+    push' 2  
+    a <- pop'
+    push' 4
+    pop'
+    
+{-
+    Have a look at the types of each of the functions.
+    
+    State' :: (s -> (a, s)) -> State' s a
+        * representation of the transiton to (a, s) from s 
+    
+    runState' :: State' s a -> s -> (a, s)
+        * just the inverse of State' 
+        * Take a State' type variable and the current state, give out the tuple 
+          containing the (value, new state)
+  
+    stackOpr' :: State' Stack Int
+        * The output is of type State' Stack Int 
+        * State' itself is a function which takes in (s -> (a, s))
+        * So, here stackOpr' is a function that takes Stack (a state) as input.
+        
+        * when combined with runState', the output of 
+        runState' stackOpr' Stack is (Int, Stack)   i.e. of form (a, s)
+        
+        :t runState' stackOpr'
+        runState' stackOpr' :: Stack -> (Int, Stack)
+-}          
+
+stackEx1 = runState' stackOpr' [1,2,3]          -- (4,[1,1,2,3])
+
+-- Conditional processing.
+-- Looks very similar to imperative programming!
+stackCondn :: State' Stack ()  
+stackCondn = do  
+    a <- pop'  
+    if a == 5  
+        then push' 5  
+        else do  
+            push' 3  
+            push' 8 
+
+stackEx2 = runState' stackCondn [1,2,3]             -- ((), [8, 3, 2, 3])
+stackEx3 = runState' stackCondn [5,2,3]             -- ((), [5, 2, 3])
+
+-- Now stackOpr' and stackCondn looks very similar to push' and pop', just 
+-- that these are little more complex operations inside.
+-- We can combine these two, as well in a 'do' style.
+
+moreStack :: State' Stack ()  
+moreStack = do  
+    a <- stackOpr'  
+    if a == 4 
+        then stackCondn  
+        else return () 
+
+stackEx5 = runState' moreStack [1,2,3,4,5]             -- ((), [8,3,1,2,3,4,5])
+
+        
