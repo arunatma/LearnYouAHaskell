@@ -21,7 +21,9 @@ dropEvery _ [] = []
 dropEvery n xs = take (n - 1) xs ++ dropEvery n (drop n xs)
 
 -- A much shorter solution
+getLastManSimple :: (RealFrac s, Integral s, Floating s) => s -> s
 getLastManSimple n = (2 * n - p) `mod` p
-	where p =  nextHighPower2 n
+	where p =  fromIntegral $ nextHighPower2 n
 
+nextHighPower2 :: (Floating s, RealFrac s) => s -> Int
 nextHighPower2 n =  (2 ^ (ceiling $ (log n) / (log 2)))

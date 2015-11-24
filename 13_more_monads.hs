@@ -478,6 +478,8 @@ threeCoins gen =
     in (firstCoin, secondCoin, thirdCoin)
 -- (need System.Random module to be imported, for 'random' is defined there)
 
+theToss = threeCoins (mkStdGen 33)          -- (True,False,True)
+
 {-
     Stateful Computation:
         s -> (a, s)
@@ -536,8 +538,11 @@ newStack = stackOpr [7,8,9]                     -- ((), [4,1,7,8,9])
     
     newtype State s a = State { runState :: s -> (a, s) }
     
-    runState was of the type, 
+    runState is of the type, 
     runState :: State s a -> s -> (a, s)   
+    
+    See that runState takes a stateful computation, "State s a" and returns a 
+    function of type (s -> (a, s))
     
 Similar to how the definitions for "Writer" are changed to "WriterT" Monad 
 Tranformer, here 'State' newtype does not exist any more.  Now, the same 
@@ -549,6 +554,12 @@ as those existed, when the book was written.
 -------------------------------------------------------------------------------}
 
 newtype State' s a = State' { runState' :: s -> (a, s) }
+-- State' s a is a 'stateful computation'
+-- 's' is the State'
+-- State' is a type constructor (left of "=")
+-- State' is also a value constructor with type (s -> (a, s)) -> State' s a
+-- Effectively, State' is a function that takes a function as input, which 
+-- takes a state 's' as input, and gives out a tuple (a, s) 
 
 instance Functor (State' s) where
     fmap = liftM
@@ -564,11 +575,19 @@ instance Monad (State' s) where
                            (State' g) = f a  
                        in  g newState 
 
+-- Explanation of (>>=)
+-- Apply the stateful computation 'h' on s, which results in (a, newState)
+-- Apply the function 'f' on a which results in a stateful computation 'g'
+-- Apply the stateful computation 'g' on the newState to get (val, finalState)                       
 
 -- Rewriting the push and pop functions using State'
+
+-- Here, the state 's' is the Stack 
+-- stateful computation for pop is Stack' Stack Int 
 pop' :: State' Stack Int  
 pop' = State' $ \(x:xs) -> (x, xs)  
   
+-- stateful computation for push is Stack' Stack () 
 push' :: Int -> State' Stack ()  
 push' a = State' $ \xs -> ((), a:xs)              
 
@@ -580,27 +599,34 @@ stackOpr' = do
     push' 4
     pop'
     
+-- 'a' is unused in the above code snippet, which as well may be omitted.    
+stackOpr'' :: State' Stack Int  
+stackOpr'' = do  
+    push' 1  
+    push' 2  
+    pop'
+    push' 4
+    pop'    
+    
 {-
     Have a look at the types of each of the functions.
     
     State' :: (s -> (a, s)) -> State' s a
-        * representation of the transiton to (a, s) from s 
+        * value constructor
+        * Takes a function and returns a stateful computation.
     
     runState' :: State' s a -> s -> (a, s)
-        * just the inverse of State' 
-        * Take a State' type variable and the current state, give out the tuple 
+        * Take a stateful computation and the current state, give out the tuple 
           containing the (value, new state)
   
     stackOpr' :: State' Stack Int
-        * The output is of type State' Stack Int 
-        * State' itself is a function which takes in (s -> (a, s))
-        * So, here stackOpr' is a function that takes Stack (a state) as input.
-        
-        * when combined with runState', the output of 
-        runState' stackOpr' Stack is (Int, Stack)   i.e. of form (a, s)
+        * stackOpr' is a stateful computation of type State' Stack Int 
         
         :t runState' stackOpr'
         runState' stackOpr' :: Stack -> (Int, Stack)
+        
+        So, runState' stackOpr' takes a Stack i.e [Int] and returns (Int, [Int])
+        
 -}          
 
 stackEx1 = runState' stackOpr' [1,2,3]          -- (4,[1,1,2,3])
@@ -632,4 +658,246 @@ moreStack = do
 
 stackEx5 = runState' moreStack [1,2,3,4,5]             -- ((), [8,3,1,2,3,4,5])
 
+{-------------------------------------------------------------------------------
+                                Get and Put
+The current type signatures
+get :: MonadState s m => m s
+put :: MonadState s m => s -> m ()
+
+To be in compliance with the chapter, we shall go with the book definitions 
+
+-------------------------------------------------------------------------------}
+get' :: State' s s
+get' = State' $ \s -> (s, s)
+-- get takes a current state and present it as the result (the first in tuple)
+
+put' :: s -> State' s ()
+put' newState = State' $ \s -> ((),newState)
+-- put takes a newState and replaces the current state with the newState.
+
+-- Now we can make the function to take (i.e get) some Stack and make a 
+-- conditional execution based on the input 
+checkStack :: State' Stack ()  
+checkStack = do  
+    stackNow <- get'  
+    if stackNow == [1,2,3]  
+        then put' [8,3,1]  
+        else put' [9,2,1] 
+
+
+chk1 = runState' checkStack [1,2,3]             -- ((), [8,3,1])
+chk2 = runState' checkStack [1,2,4]             -- ((), [9,2,1])
+
+{-
+
+Type signatures of (>>=) bind operator.
+
+Generic:
+(>>=) :: Monad m => m a -> (a -> m b) -> m b
+
+For State:
+(>>=) :: State s a -> (a -> State s b) -> State s b  
+
+For Maybe:
+(>>=) :: Maybe a -> (a -> Maybe b) -> Maybe b  
+
+-}
+
+{-------------------------------------------------------------------------------
+            Random Numbers using State Monad.
+-------------------------------------------------------------------------------}
+
+-- type signature of 'random' function
+-- random :: (RandomGen g, Random a) => g -> (a, g) 
+
+-- See the type (g -> (a, g)) So, it is a stateful computation.
+-- It can be wrapped in the State' monad.
+
+randomSt :: (RandomGen g, Random a) => State' g a
+randomSt = State' random
+
+getThreeToss :: State' StdGen (Bool, Bool, Bool)
+getThreeToss = do
+    a <- randomSt
+    b <- randomSt 
+    c <- randomSt
+    return (a, b, c)
+
+threeToss = runState' getThreeToss (mkStdGen 33)
+-- ((True,False,True),680029187 2103410263)
+
+threeTossOnly = fst $ runState' getThreeToss (mkStdGen 33) -- (True,False,True)
+
+{-------------------------------------------------------------------------------
+                            Either Monad
+-------------------------------------------------------------------------------}
+
+-- data Either a b = Left a | Right b 
+
+rightOnly = Right 40                -- rightOnly :: Either a Integer
+leftOnly = Left "Hello"             -- leftOnly  :: Either [Char] b
+
+-- General convention in the Either data type is 
+-- Left "Error Message" | Right theValue
+
+{-
+    Monad Instance for Either (in Control.Monad.Error)
+    Btw, Control.Monad.Error is deprecated - to be replaced by 
+         Control.Monad.Except
+    
+    instance (Error e) => Monad (Either e) where 
+        return x = Right x
+        Right x     >>= f = f x
+        Left err    >>= f = Left err
+        fail msg          = Left (strMsg msg)
+
+The instance implementation is very similar to Maybe Monad. In Maybe, if it is 
+Nothing, no error information is passed, here if it is an error, Left err is 
+obtained as result.        
+
+Also, see the requirement that 'e' has to be an instance of 'Error' typeclass.
+
+-}
+
+eitherEx1 = Left "msg" >>= \x -> return (x + 1)         -- Left "msg"  
+eitherEx2 = Right 100 >>= \x -> Left "NoWay"            -- Left "NoWay"
+eitherEx3 = Right 100 >>= \x -> return (x + 1)          -- Right 101 
+
+{-------------------------------------------------------------------------------
+                            Monadic Functions
+--------------------------------------------------------------------------------
+
+liftM
+Type Signature of liftM
+liftM :: (Monad m) => (a -> b) -> m a -> m b 
+
+Compare liftM with fmap 
+fmap ::  (Functor f) => (a -> b) -> f a -> f b  
+
+    Both are exactly the same, just that the wrapper is Functor in fmap, while 
+    the wrapper is Monad in liftM 
+    
+Both fmap and liftM is defined in GHC.Base
+See the source code here:
+https://hackage.haskell.org/package/base-4.8.1.0/docs/src/GHC.Base.html
+
+Implementation of liftM:
+
+(using >>=)
+liftM :: (Monad m) => (a -> b) -> m a -> m b  
+liftM f m = m >>= (\x -> return (f x))  
+
+(using 'do')
+liftM   :: (Monad m) => (a -> b) -> m a -> m b
+liftM f m = do 
+    x <- m
+    return (f x) 
+-}
+
+liftEx1 = liftM (*3) (Just 8)                       -- Just 24
+liftEx2 = fmap (*3) (Just 8)                        -- Just 24
+
+liftEx3 = runWriter' $ liftM not $ Writer' (True, "chickpeas")  
+liftEx4 = runWriter' $ fmap not $ Writer' (True, "chickpeas")  
+-- (False, "chickpeas")
+
+liftEx5 = runState' (liftM (+100) pop') [1,2,3,4] 
+liftEx6 = runState' (fmap (+100) pop') [1,2,3,4] 
+-- (101,[2,3,4])
+
+
+-- :t runState'             :: State' s a -> s -> (a, s)
+-- :t (liftM (+100) pop')   :: State' Stack Int
+-- :t (fmap (+100) pop')    :: State' Stack Int
+
+-- :t liftM (+100)          :: (Monad m, Num r) => m r -> m r
+-- :t fmap (+100)           :: (Functor f, Num b) => f b -> f b
+
+-- :t pop'                  :: State' Stack Int     (eqv of m r or f b 
+--                                                   where m = f = State' Stack)
+
+appEx1 = (+) <$> Just 3 <*> Just 5              -- Just 8
+appEx2 = (+) <$> Just 3 <*> Nothing             -- Nothing
+
+-- :t (<*>)                 :: (Applicative f) => f (a -> b) -> f a -> f b  
+-- :t fmap                  :: (Functor f) => (a -> b) -> f a -> f b
+-- same as fmap, but the function is also within the context, here!
+
+{- 
+    Implementing (<*>) using Monads. (ap is defined in GHC.Base)
+    
+    ap :: (Monad m) => m (a -> b) -> m a -> m b
+    ap mf m = do
+        f <- mf
+        m <- x
+        return (f x)
+    
+-}    
+
+appEx3 = Just (+3) <*> Just 4                   -- Just 7
+appEx4 = Just (+3) `ap` Just 4                  -- Just 7
+
+appEx5 = [(+1), (+2), (+3)] <*> [10, 11]        -- [11, 12, 12, 13, 13, 14]
+appEx6 = [(+1), (+2), (+3)] `ap` [10, 11]       -- [11, 12, 12, 13, 13, 14]
+
+appEx7 = ((+) <$> Just 3) `ap` Just 5           -- Just 8      (same as appEx1)
+appEx8 = ((+) <$> Just 3) `ap` Nothing          -- Nothing     (same as appEx2)
+
+-- In Chapter 11, Applicative Functors, we say liftA2 
+{-
+    liftA2 :: (Applicative f) => (a -> b -> c) -> f a -> f b -> f c  
+    liftA2 f x y = f <$> x <*> y  
+
+    In fmap or <$> the function is (a -> b), whereas in liftA2, the function is
+    (a -> b -> c)
+    
+    liftM2 is same as liftA2, just that it has a Monad typeclass constraint.
+    liftM2  :: (Monad m) => (a -> b -> c) -> m a -> m b -> m c
+    liftM2 f m1 m2  = do 
+        x1 <- m1
+        x2 <- m2
+        return (f x1 x2) 
         
+    Similarly, there are liftM3, liftM4, liftM5 functions.    
+-}
+
+{-------------------------------------------------------------------------------
+                            join
+--------------------------------------------------------------------------------
+
+join :: (Monad m) => m (m a) -> m a 
+
+The way join is implemented:
+join    :: (Monad m) => m (m a) -> m a
+join x  =  x >>= id
+
+In 'do' notation
+join :: (Monad m) => m (m a) -> m a
+join mm = do 
+    m <- mm 
+    m 
+
+Implemented in GHC.Base    
+-------------------------------------------------------------------------------}
+
+joinEx1 = join (Just (Just 9))                  -- Just 9
+joinEx2 = join [[1,2,3]]                        -- [1,2,3]
+joinEx3 = join (Just Nothing)                   -- Nothing
+joinEx4 = join Nothing                          -- Nothing
+joinEx5 = join []                               -- []
+-- But, join [1,2,3] will create error.
+
+joinEx6 = join [[1,2,3],[4,5,6]]                -- [1,2,3,4,5,6]
+joinEx7 = runWriter' $ join (Writer' (Writer' (1, "aaa"), "bbb"))
+-- (1, "bbbaaa")
+
+joinEx8 = join (Right (Right 9))                -- Right 9
+joinEx9 = join (Right (Left "Error"))           -- Left "Error"
+joinEx10 = join (Left "error")                  -- Left "error"
+
+joinEx11 = runState' (join (State' $ \s -> (push' 10,1:2:s))) [0,0,0]
+-- ((),[10,1,2,0,0,0])
+
+-- :t  :t join (State' $ \s -> (push' 10,1:2:s))
+
+
