@@ -757,5 +757,3 @@ Very similar to, (for normal functions)
     3.  f . (g . h) == (f . g) . h 
 
 -}
-    
-    

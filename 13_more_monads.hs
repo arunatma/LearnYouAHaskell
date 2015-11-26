@@ -11,6 +11,7 @@
 -}
 
 import qualified Data.ByteString.Lazy as B
+import Data.List
 import Data.Char
 import Data.Monoid 
 import Control.Monad.Writer
@@ -18,7 +19,7 @@ import Control.Applicative (Applicative(..))
 import Control.Monad       (liftM, ap)
 import System.Random
 import Control.Monad.State
-
+import Data.Ratio
 {-
 To see what all packages installed:
 
@@ -545,11 +546,11 @@ newStack = stackOpr [7,8,9]                     -- ((), [4,1,7,8,9])
     function of type (s -> (a, s))
     
 Similar to how the definitions for "Writer" are changed to "WriterT" Monad 
-Tranformer, here 'State' newtype does not exist any more.  Now, the same 
-functionality is provided by the "StateT"
+    Tranformer, here 'State' newtype does not exist any more.  Now, the same 
+    functionality is provided by the "StateT"
 
 So, to be in alignment with the book example, rewriting the State definitions 
-as those existed, when the book was written.
+    as those existed, when the book was written.
 
 -------------------------------------------------------------------------------}
 
@@ -558,7 +559,7 @@ newtype State' s a = State' { runState' :: s -> (a, s) }
 -- 's' is the State'
 -- State' is a type constructor (left of "=")
 -- State' is also a value constructor with type (s -> (a, s)) -> State' s a
--- Effectively, State' is a function that takes a function as input, which 
+-- Effectively, State' is a function that takes a function 'f' as input, 'f' 
 -- takes a state 's' as input, and gives out a tuple (a, s) 
 
 instance Functor (State' s) where
@@ -577,7 +578,7 @@ instance Monad (State' s) where
 
 -- Explanation of (>>=)
 -- Apply the stateful computation 'h' on s, which results in (a, newState)
--- Apply the function 'f' on a which results in a stateful computation 'g'
+-- Apply the function 'f' on 'a' which results in a stateful computation 'g'
 -- Apply the stateful computation 'g' on the newState to get (val, finalState)                       
 
 -- Rewriting the push and pop functions using State'
@@ -898,6 +899,367 @@ joinEx10 = join (Left "error")                  -- Left "error"
 joinEx11 = runState' (join (State' $ \s -> (push' 10,1:2:s))) [0,0,0]
 -- ((),[10,1,2,0,0,0])
 
--- :t  :t join (State' $ \s -> (push' 10,1:2:s))
+-- join (State' $ \s->(push' 10,1:2:s)) :: State' Stack ()
+-- (State' $ \s -> (push' 10,1:2:s))    :: Num a => State' [a] (State' Stack ())
+--      or, simply
+-- (State' $ \s -> (push' 10,1:2:s))    :: State' Stack (State' Stack ())
+
+-- (\s -> (push' 10, 1:2:s))            :: Num a => [a]->(State' Stack (), [a])
+-- (\s -> (push' 10, 1:2:s))            :: Stack -> (State' Stack (), Stack)
+
+-- (push' 10, 1:2:[3,4])                :: Num a => (State' Stack (), [a])
+-- (push' 10, 1:2:[3,4])                :: (State' Stack (), Stack)
+
+{-
+    See that the following two have the same type signature :: State' Stack ()
+    
+        push' 10
+    
+    and 
+    
+        join (State' $ \s->(push' 10, s))
+    
+    And, both of these effectively do the same thing!
+    
+-}
+
+pushEx1 = runState' (push' 10) (1:2:[3..6])
+joinEx12 = runState' (join (State' $ \s -> (push' 10,1:2:s))) [3..6]
+-- Both pushEx and joinEx12 will have same output ((),[10,1,2,3,4,5,6])
+
+{-------------------------------------------------------------------------------
+        Relation between 'bind' (>>=) and 'join'
+--------------------------------------------------------------------------------
+
+    m (>>=) f       is equivalent to
+        
+    join (fmap f m)
+
+    So, feeding a monadic value 'm' to a function 'f' using (>>=) is eqv. to 
+    mapping the function f on the monadic value and calling join on it to take 
+    out the outer context.
+    
+    So, instead of extacting the value from monadic value, and applying f on it,
+    apply f on the monadic value and take out the outer context using 'join'
+    
+:t (>>=)                            :: Monad m => m a -> (a -> m b) -> m b
+:t \m -> (\f -> join (fmap f m))    :: Monad m => m a -> (a -> m b) -> m b    
+
+From the book:
+"The fact that m >>= f always equals join (fmap f m) is very useful 
+if we're making our own Monad instance for some type because it's often 
+easier to figure out how we would flatten a nested monadic value than 
+figuring out how to implement >>="
+
+-------------------------------------------------------------------------------}
+
+joinEx13 = join (fmap (\x -> Just (x + 1)) (Just 9))
+bindEx1  = Just 9 >>= (\x -> Just (x + 1))
+-- both these result in Just 10
+
+{-------------------------------------------------------------------------------
+                            filterM
+--------------------------------------------------------------------------------
+-- the standard filter function
+filter :: (a -> Bool) -> [a] -> [a]
+
+Instead of Bool, what if the function returns a monadic Bool value
+filterM :: (Monad m) => (a -> m Bool) -> [a] -> m [a] 
+
+-------------------------------------------------------------------------------}
+
+filterEx1 = filter (\x -> x < 4) [9,1,5,2,10,3]  
+-- [1,2,3]
+
+-- Let us provide a log of what happened here, using a Writer' monad.
+keepSmall :: Int -> Writer' [String] Bool  
+keepSmall x  
+    | x < 4 = do  
+        tell' ["Less than 4. So, keeping " ++ show x]  
+        return True  
+    | otherwise = do  
+        tell' [show x ++ " is not less than 4, throwing it away"]  
+        return False  
+        
+-- Here, keepSmall is a function that returns a "m Bool"
+
+filterMEx1 = runWriter' $ filterM keepSmall [9,1,5,2,10,3]
+{-
+([1,2,3],
+    ["9 is not less than 4, throwing it away",
+     "Less than 4. So, keeping 1",
+     "5 is not less than 4, throwing it away",
+     "Less than 4. So, keeping 2",
+     "10 is not less than 4, throwing it away",
+     "Less than 4. So, keeping 3"])
+-}
+
+filterMEx1Logs = mapM_ putStrLn $ snd filterMEx1
+
+-- Getting a power set for the given number using filterM 
+{-
+        [1,2,3]  
+        [1,2]  
+        [1,3]  
+        [1]  
+        [2,3]  
+        [2]  
+        [3]  
+        [] 
+        
+    Another way to think about the PowerSet:    
+    Combinations of keeping and throwing all the elements from a given list!
+    
+    So, instead of returning a deterministic Bool, return a non-deterministic
+    Bool in the predicate function. (i.e. [Bool])
+-}
+
+powerset :: [a] -> [[a]]  
+powerset xs = filterM (\x -> [True, False]) xs
+-- Now, instead of getting a single list back, we would get a non-deterministic 
+-- list back. ie. List of lists.
+
+pwr3 = powerset [1,2,3] -- [[1,2,3],[1,2],[1,3],[1],[2,3],[2],[3],[]]
+
+{-------------------------------------------------------------------------------
+                            foldM
+--------------------------------------------------------------------------------
+-- the standard foldl function
+foldl :: (a -> b -> a) -> a -> [b] -> a
+
+foldM :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
+
+-------------------------------------------------------------------------------}
+
+foldEx1 = foldl (\acc x -> acc + x) 0 [2,8,3,1]         -- 14
+-- (((0 + 2) + 8) + 3) + 1
+
+-- Added Condition:
+-- The whole summation has to fail, even if there is a negative number 
+
+binPositives :: Int -> Int -> Maybe Int  
+binPositives acc x  
+    | x < 0     = Nothing  
+    | otherwise = Just (acc + x) 
+
+foldMEx1 = foldM binPositives 0 [2,8,3,1]       -- Just 14 
+foldMEx2 = foldM binPositives 0 [2,8,3,-1]      -- Nothing
+
+addWithLogs :: Int -> Int -> Writer' [String] Int  
+addWithLogs acc x  = do  
+        tell' ["Now adding " ++ show x ++ " to accumulator " ++ show acc]  
+        return (acc + x)  
+
+foldMEx3 = runWriter' $ foldM addWithLogs 0 [2,8,3,1]
+{-
+    (14,
+        ["Now adding 2 to accumulator 0",
+         "Now adding 8 to accumulator 2",
+         "Now adding 3 to accumulator 10",
+         "Now adding 1 to accumulator 13"]
+    )
+-}
+
+{-------------------------------------------------------------------------------
+                            Composing Monadic Functions
+-------------------------------------------------------------------------------}
+
+-- type signature of function compositon (.)
+-- (.) :: (b -> c) -> (a -> b) -> a -> c
+compF = (+3) . (*2)
+compEx1 = compF 6           -- 15
+
+-- (<=<) is monadic function composition
+-- (<=<) :: (Monad m) => (b -> m c) -> (a -> m b) -> a -> m c
+
+-- They type signature can be specific as below.
+-- monadCompF :: Int -> Maybe Int
+-- Or, can be written in a general way as well.
+monadCompF :: (Monad m, Num c) => c -> m c
+monadCompF = (\x -> return (x + 3)) <=< (\x -> return (x * 2))
+
+compEx2 = monadCompF 6 :: (((->) Int) Int)  -- compEx2 is a function takes any 
+                                            -- int and gives out '15'
+compEx3 = monadCompF 6 :: Maybe Int         -- Just 15 
+compEx4 = monadCompF 6 :: [Int]             -- [15]
+
+compEx5 = Just 5 >>= monadCompF             -- Just 13
+
+-- Accumulating series of functions, using foldr
+seriesFn :: Integer -> Integer
+seriesFn = foldr (.) id [(*5),(*100),(+3)]   -- Note the use of foldr 
+
+{-------------------------------------------------------------------------------
+                            Knight Movement Example
+-------------------------------------------------------------------------------}
+-- Bringing the Knight in 3 steps example here (from Chapter 12: Monads)
+
+type KnightPos = (Int, Int)                         -- Column, Row 
+
+moveKnight :: KnightPos -> [KnightPos]
+moveKnight (c, r) = do
+    (c', r') <- [(c+2,r-1),(c+2,r+1),(c-2,r-1),(c-2,r+1)  
+                ,(c+1,r-2),(c+1,r+2),(c-1,r-2),(c-1,r+2)  
+                ]
+    guard (c' `elem` [1..8] && r' `elem` [1..8])
+    return (c', r')
+
+in3 :: KnightPos -> [KnightPos]  
+in3 start = return start >>= moveKnight >>= moveKnight >>= moveKnight  
+
+canReachIn3 :: KnightPos -> KnightPos -> Bool  
+canReachIn3 start end = end `elem` in3 start
+
+-- see that in the function 'in3', we are repeatedly calling moveKnight.
+-- Let us make the in3 generic, as 'inN' where we can specify N steps and 
+-- get all the positions that can be reached in N steps.
+
+-- 'replicate' needs Data.List to be imported.
+-- replicate :: Int -> a -> [a]
+inN :: Int -> KnightPos -> [KnightPos]  
+inN x start = return start >>= foldr (<=<) return (replicate x moveKnight)
+
+-- canReachIn will also become generic 
+canReachIn :: Int -> KnightPos -> KnightPos -> Bool  
+canReachIn x start end = end `elem` inN x start  
+
+{-------------------------------------------------------------------------------
+                    Creating a Monad (Probabilty Monad)
+-------------------------------------------------------------------------------}
+{-
+    (%) is defined in Data. Ratio
+    (%) :: Integral a => a -> a -> Ratio a
+-}
+    
+-- We want a list in which each element has to have an associated probability
+-- Probabilities of all elements in a list should add to 1
+newtype Prob a = Prob { getProb :: [(a, Rational)] } deriving Show  
+
+-- Prob is the type constructor.  Its value constructor (also Prob) takes a 
+-- list of tuples with the element and associated probability.
+
+-- creating a functor instance.
+instance Functor Prob where
+    fmap f (Prob xs) = Prob $ map (\(x, p) -> (f x, p)) xs
+-- apply the function only to the element and not to the associated probability.
+
+probMult2 = fmap (*2) (Prob [(3,1%2),(5,1%4),(9,1%4)])      
+-- Prob {getProb = [(6, 1 % 2),(10, 1 % 4),(18, 1 % 4)]}
+
+probNegate = fmap negate (Prob [(3,1%2),(5,1%4),(9,1%4)])  
+-- Prob {getProb = [(-3, 1 % 2),(-5, 1 % 4),(-9, 1 % 4)]}
 
 
+{-
+    Considering a little tricky situation
+        Two possible events
+            x       with 25% probability 
+                x can internally have two outcomes:
+                a   with 50% probability
+                b   with 50% probability 
+                
+            y       with 75% probability
+                y can internally have two outcomes:
+                c   with 50% probabilty
+                d   with 50% probability
+                
+    So, overall
+        a and b have 12.5% probability
+        c and d have 37.5% probability 
+-}
+
+trickySituation :: Prob (Prob Char)  
+trickySituation = Prob  
+    [( Prob [('a', 1%2),('b', 1%2)] , 1%4 )  
+    ,( Prob [('c', 1%2),('d', 1%2)] , 3%4)  
+    ] 
+
+-- Now, we need to take care of applying the outer probability to inner events.
+-- Take each outer probability 'p' and multiply with inner probabilities 'r'
+-- as referred below.
+flatten :: Prob (Prob a) -> Prob a  
+flatten (Prob xs) = Prob $ concat $ map multAll xs  
+    where multAll (Prob innerxs, p) = map (\(x, r) -> (x, p * r)) innerxs
+    
+-- Now we have a single list of tuples - elements with associated probabilities    
+plainSituation = flatten trickySituation
+-- Prob {getProb = [('a',1 % 8),('b',1 % 8),('c',3 % 8),('d',3 % 8)]}
+
+-- We need to have an Applicative instance as well.
+instance Applicative Prob where
+    pure x = Prob [(x, 1%1)]
+    (<*>) = ap 
+    
+-- Now we can create a Monad instance for 'Prob' data type.
+-- If there is single element, its probability should be 1  (for 'return')
+instance Monad Prob where  
+    return x = Prob [(x, 1%1)]
+    m >>= f = flatten (fmap f m)
+    fail _ = Prob [] 
+
+{-
+    Monad Laws to be followed.
+    
+    1. return x >>= f  should be equal to f x 
+    2. m >>= return    should be equal to m
+    3. f <=< (g <=< h) should be equal to (f <=< g) <=< h
+        -- here multiplication is associative, so this holds as well.
+        
+-}
+
+-- We have a 'Probability' monad. It helps in doing calculation with 
+-- joint probability, conditional probability etc.
+
+data Coin = Heads | Tails deriving (Show, Eq)  
+  
+coin :: Prob Coin  
+coin = Prob [(Heads, 1%2),(Tails, 1%2)]  
+  
+biasedCoin :: Prob Coin  
+biasedCoin = Prob [(Heads, 1%10),(Tails, 9%10)]  
+
+-- Tossing the coin three times, select only those cases where all are Tails.
+flipThree :: Prob Bool  
+flipThree = do  
+    a <- coin  
+    b <- coin  
+    c <- biasedCoin  
+    return (all (== Tails) [a, b, c])
+    
+{- 
+flipThree is as follows:
+   
+Prob {getProb = [(False, 1 % 40), 
+                 (False, 9 % 40),
+                 (False, 1 % 40),
+                 (False, 9 % 40),
+                 (False, 1 % 40),
+                 (False, 9 % 40),
+                 (False, 1 % 40),
+                 (True,  9 % 40)]}    
+                 
+When one of the coins is biased, all tails probability is 9/40!
+-}
+
+flipThree' :: Prob Bool  
+flipThree' = do  
+    a <- biasedCoin  
+    b <- biasedCoin  
+    c <- biasedCoin  
+    return (all (== Tails) [a, b, c])
+
+{- 
+flipThree is as follows:
+   
+Prob {getProb = [(False,  1 % 1000),
+                 (False,  9 % 1000),
+                 (False,  9 % 1000),
+                 (False, 81 % 1000),
+                 (False,  9 % 1000),
+                 (False, 81 % 1000),
+                 (False, 81 % 1000),
+                 (True, 729 % 1000)]}
+                 
+When all the coins are biased, all tails probability is 729/1000!                  
+-}
+    
