@@ -66,19 +66,32 @@ Designing a RPN Calculator:
         
         :t foldl :: (b -> a -> b) -> b -> [a] -> b
             foldingFunction should be of type (b -> a -> b)
-            Here, b is [String]
-                  a is 
+            Here, b is [Int]  		
+                  a is a single String 	i.e. [Char]
+			foldingFunction takes a stack and an item, returns a stack
     7. Same function, in point-free style
         solveRPN :: (Num a) => String -> a  
         solveRPN  = head . foldl foldingFunction [] . words  
             where   foldingFunction stack item = ... 
-            
--------------------------------------------------------------------------------}
-  
-  
-solveRPN ::  String -> Double  
-solveRPN = head . foldl foldFn [] . words 
+    8. Constructiong the foldingFunction for only "*", "+" and "-"
 
+-------------------------------------------------------------------------------}
+
+solveRPN :: (Num a, Read a) => String -> a  
+solveRPN  = head . foldl foldingFunction [] . words  
+	
+-- Step 8: Construction the foldingFunction:
+foldingFunction :: (Num a, Read a) => [a] -> String -> [a]
+foldingFunction (x:y:ys) "*" = (x * y) : ys
+foldingFunction (x:y:ys) "+" = (x + y) : ys
+foldingFunction (x:y:ys) "-" = (y - x) : ys
+foldingFunction xs numberString = (read numberString) : xs   
+
+
+solveRPN' ::  String -> Double  
+solveRPN' = head . foldl foldFn [] . words 
+
+-- Including a few other operators in the fold function.
 foldFn :: (Floating a, Read a) => [a] -> String -> [a]
 foldFn (x:y:xs) "*" = (x * y) : xs
 foldFn (x:y:xs) "+" = (x + y) : xs
@@ -88,3 +101,9 @@ foldFn (x:y:ys) "^" = (y ** x): ys
 foldFn (x:xs) "ln"  = log x   : xs  
 foldFn xs     "sum" = [sum xs]  
 foldFn xs numberString = read numberString:xs
+
+ex1 = solveRPN' "2 4 +"							-- 6
+ex2 = solveRPN' "10 10 10 10 10 sum 4 /"  		-- 12.5
+ex3 = solveRPN' "2.7 ln"						-- 0.99325
+ex4 = solveRPN' "2 3 ^"  						-- 8
+
