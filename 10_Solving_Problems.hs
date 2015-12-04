@@ -5,7 +5,7 @@
 import Data.List  
 
 {-------------------------------------------------------------------------------
-                    Reverse Polish Notation Calculator
+                    Problem 1: Reverse Polish Notation Calculator
                     
 Mathematical Expression:
         10 - (4 + 3) * 2
@@ -106,4 +106,45 @@ ex1 = solveRPN' "2 4 +"							-- 6
 ex2 = solveRPN' "10 10 10 10 10 sum 4 /"  		-- 12.5
 ex3 = solveRPN' "2.7 ln"						-- 0.99325
 ex4 = solveRPN' "2 3 ^"  						-- 8
+
+{-------------------------------------------------------------------------------
+                        Problem 2: Heathrow to London
+                        
+    Airport has to points to get out, to go to London (A and B).  At any 
+    junction, any new path (straight or across) can be taken.
+    Find the shortest path.
+                        
+                50      5               40          10    
+           A--------|------------|------------|-------------
+                    |            |            |
+    AIRPORT         |30          |20          |25                   LONDON
+                    |            |            |
+           B--------|------------|------------|--------------
+                10      90              2           8
+            
+    In this case, the shortest path is 
+        10 -> 30 -> 5 -> 20 -> 2 -> 8       = 75 km
+        
+Objective:
+    Take input of the road-paths in a specified format and print out the 
+    shortest path with the total shortest distance to travel
+Input format:
+    The input format for the above grid would be 
+        50
+        10
+        30
+        5
+        90 
+        20
+        40 
+        2
+        25 
+        10
+        8
+        0
+        
+        The input format is nothing but, road A distance to next node, road B 
+        distance to next node, followed by the interconnection distance between
+        the nodes.
+--------------------------------------------------------------------------------
 
