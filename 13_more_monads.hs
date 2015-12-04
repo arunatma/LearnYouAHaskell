@@ -1061,6 +1061,53 @@ foldMEx3 = runWriter' $ foldM addWithLogs 0 [2,8,3,1]
 -}
 
 {-------------------------------------------------------------------------------
+                            Safe RPN Calculator
+Refer to Chapter 10 for the base version of RPN Calculator implementation.
+-------------------------------------------------------------------------------}
+
+solveRPN :: String -> Double  
+solveRPN = head . foldl foldingFunction [] . words  
+
+-- foldingFunction failed when the input does not make sense 
+-- For example if given something like "2 3 + +"
+foldingFunction :: [Double] -> String -> [Double]  
+foldingFunction (x:y:ys) "*" = (x * y):ys  
+foldingFunction (x:y:ys) "+" = (x + y):ys  
+foldingFunction (x:y:ys) "-" = (y - x):ys  
+foldingFunction xs numberString = read numberString:xs
+
+-- readMaybe uses "reads" function which returns a single element list 
+-- on successful read, or empty list if it is a failure.
+-- readMaybe converts the failure case from the context of "List" to "Maybe"
+readMaybe :: (Read a) => String -> Maybe a  
+readMaybe st = case reads st of [(x,"")] -> Just x  
+                                _ -> Nothing  
+                                
+-- Make the folding function to work gracefully
+safeFoldFn :: [Double] -> String -> Maybe [Double]
+safeFoldFn (x:y:ys) "*" = return ((x * y):ys)       -- wrapped in the context!
+safeFoldFn (x:y:ys) "+" = return ((x + y):ys)
+safeFoldFn (x:y:ys) "-" = return ((y - x):ys) 
+safeFoldFn xs numberString = liftM (:xs) (readMaybe numberString)
+
+safeEx1 = safeFoldFn [3, 2] "*"         -- Just [6.0]  
+safeEx2 = safeFoldFn [3, 2] "-"         -- Just [-1.0]  
+safeEx3 = safeFoldFn [] "*"             -- Nothing  
+safeEx4 = safeFoldFn [] "1"             -- Just [1.0]  
+safeEx5 = safeFoldFn [] "1 someRandom"  -- Nothing  
+
+-- foldM : foldes into a single value - list containing a single value 
+safeSolveRPN :: String -> Maybe Double  
+safeSolveRPN st = do  
+    [result] <- foldM safeFoldFn [] (words st)  
+    return result       -- put in Maybe Context 
+    
+safeEx6 = safeSolveRPN "1 2 * 4 +"                  -- Just 6.0  
+safeEx7 = safeSolveRPN "1 2 * 4 + 5 *"              -- Just 30.0  
+safeEx8 = safeSolveRPN "1 2 * 4"                    -- Nothing  
+safeEx9 = safeSolveRPN "1 8 wharglbllargh"          -- Nothing      
+
+{-------------------------------------------------------------------------------
                             Composing Monadic Functions
 -------------------------------------------------------------------------------}
 
