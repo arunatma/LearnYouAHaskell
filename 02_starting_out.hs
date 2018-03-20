@@ -1,4 +1,4 @@
--- from http://learnyouahaskell.com/starting-out
+--- from http://learnyouahaskell.com/starting-out
 
 doubleMe x = x + x
 
